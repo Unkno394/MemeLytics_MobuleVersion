@@ -68,7 +68,7 @@ const TextEditModal = ({ visible, textBlock, onClose, onChange }) => {
   }, []);
 
   const handleClose = () => {
-    onChange({
+    onSave?.({
       ...textBlock,
       text: localText,
       fontSize: localFontSize,
@@ -79,6 +79,7 @@ const TextEditModal = ({ visible, textBlock, onClose, onChange }) => {
     });
     onClose?.();
   };
+  
 
   // Слайдер размера шрифта
   const handleSliderMove = (pageY) => {

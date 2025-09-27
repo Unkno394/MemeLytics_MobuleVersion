@@ -28,7 +28,8 @@
     },
     "plugins": [
       "expo-router",
-      "expo-font"
+      "expo-font",
+      "expo-asset"
     ],
     "splash": {
       "image": "./assets/images/splashscreen_logo.png",

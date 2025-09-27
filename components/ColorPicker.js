@@ -1,46 +1,70 @@
-import { useState } from "react";
-import { View, Image } from "react-native";
-import ViewShot from "react-native-view-shot";
+import React, { useRef, useState, useEffect } from "react";
+import { View, StyleSheet, Dimensions } from "react-native";
+import { WebView } from "react-native-webview";
 
-export const useEyedropper = (imageUri, imageLayout) => {
-  const [viewShotRef, setViewShotRef] = useState(null);
+const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
-  const pickColor = async (x, y) => {
-    if (!viewShotRef || !imageLayout || !imageUri) return null;
+const PixelPicker = ({ imageUri, x, y, size = 150, zoom = 3, onColorPicked }) => {
+  const webRef = useRef(null);
+  const [html, setHtml] = useState("");
 
-    try {
-      const uri = await viewShotRef.capture({
-        format: "png",
-        quality: 1,
-        result: "base64",
-      });
+  useEffect(() => {
+    if (!imageUri) return;
 
-      // Конвертируем base64 в RGB вручную (приближенно)
-      const raw = atob(uri);
-      const r = raw.charCodeAt(0);
-      const g = raw.charCodeAt(1);
-      const b = raw.charCodeAt(2);
+    const htmlContent = `
+      <html>
+      <body style="margin:0;padding:0;overflow:hidden;">
+        <canvas id="canvas"></canvas>
+        <script>
+          const img = new Image();
+          img.crossOrigin = "Anonymous";
+          img.src = "${imageUri}";
+          img.onload = () => {
+            const canvas = document.getElementById("canvas");
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(img, 0, 0);
+            
+            function getPixelColor(x, y) {
+              const pixel = ctx.getImageData(x, y, 1, 1).data;
+              const r = pixel[0];
+              const g = pixel[1];
+              const b = pixel[2];
+              const a = pixel[3];
+              const hex = "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+              return hex;
+            }
 
-      const hex = `#${((1 << 24) + (r << 16) + (g << 8) + b)
-        .toString(16)
-        .slice(1)}`;
+            // Отправляем цвет пикселя в React Native
+            const pixelColor = getPixelColor(${x}, ${y});
+            window.ReactNativeWebView.postMessage(pixelColor);
+          }
+        </script>
+      </body>
+      </html>
+    `;
 
-      return hex;
-    } catch (err) {
-      console.warn("Eyedropper error:", err);
-      return null;
-    }
-  };
+    setHtml(htmlContent);
+  }, [imageUri, x, y]);
 
-  const EyedropperView = () => (
-    <ViewShot
-      style={{ width: imageLayout.width, height: imageLayout.height, position: "absolute", top: -1000 }}
-      ref={setViewShotRef}
-      options={{ format: "png", quality: 1 }}
-    >
-      <Image source={{ uri: imageUri }} style={{ width: imageLayout.width, height: imageLayout.height }} />
-    </ViewShot>
+  return (
+    <View style={{ width: size, height: size, borderWidth: 2, borderColor: "#16DBBE", overflow: "hidden" }}>
+      {html !== "" && (
+        <WebView
+          ref={webRef}
+          originWhitelist={['*']}
+          source={{ html }}
+          javaScriptEnabled
+          scrollEnabled={false}
+          onMessage={(event) => {
+            const color = event.nativeEvent.data;
+            onColorPicked?.(color);
+          }}
+        />
+      )}
+    </View>
   );
-
-  return { pickColor, EyedropperView };
 };
+
+export default PixelPicker;

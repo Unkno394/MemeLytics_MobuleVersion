@@ -39,12 +39,32 @@ import TextEditModal from "../../components/TextEditModal";
 import { LogBox } from "react-native";
 import { useAppFonts } from "../../src/assets/fonts/fonts";
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import PixelColor from 'react-native-pixel-color';
 import Magnifier from "../../components/magnifier.js";
+import PixelPicker  from "../../components/ColorPicker.js";
+import { GLView } from "expo-gl";
+import Expo2DContext from "expo-2d-context";
+import { Asset } from "expo-asset";
 
 LogBox.ignoreLogs([
   "Warning: Cannot update a component from inside the function body of a different component",
 ]);
+
+async function loadImageToGL(uri) {
+  try {
+    // Если URI уже локальный, Asset.fromURI всё равно вернёт его
+    const asset = Asset.fromURI(uri);
+
+    // Скачиваем, если это удалённый ресурс
+    await asset.downloadAsync();
+
+    // Возвращаем локальный URI, который можно передавать в ctx.drawImage
+    return asset.localUri;
+  } catch (e) {
+    console.error("Ошибка загрузки изображения для GL:", e);
+    return null;
+  }
+}
+
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const AnimatedPath = Animated.createAnimatedComponent(Path);
@@ -81,7 +101,7 @@ const DraggableText = ({
   startX = 0,
   startY = 0,
   onOpenEditor,
-  disabled = false, // Новый проп для блокировки
+  disabled = false,
 }) => {
   const translateX = useSharedValue(startX);
   const translateY = useSharedValue(startY);
@@ -94,7 +114,7 @@ const DraggableText = ({
   const savedRotation = useSharedValue(0);
 
   const panGesture = Gesture.Pan()
-    .enabled(!disabled) // Блокируем жесты когда disabled=true
+    .enabled(!disabled)
     .onBegin(() => {
       if (disabled) return;
       savedX.value = translateX.value;
@@ -165,7 +185,7 @@ const DraggableText = ({
     position: "absolute",
     left: 0,
     top: 0,
-    opacity: disabled ? 0.7 : 1, // Визуальное указание на блокировку
+    opacity: disabled ? 0.7 : 1,
   }));
 
   return (
@@ -226,15 +246,14 @@ const CreateMemeScreen = () => {
   const [fontsLoaded] = useAppFonts();
   const { isDark } = useContext(ThemeContext);
   const navigation = useNavigation();
-  
+  const magnifierRef = useRef(null);
   // useState для лупы
   const [magnifierVisible, setMagnifierVisible] = useState(false);
   const [magnifierPos, setMagnifierPos] = useState({ x: 0, y: 0 });
-
+  const glContextRef = useRef(null);
   // ref на контейнер изображения
   const imageRef = useRef(null);
   const [imageLayout, setImageLayout] = useState({ x: 0, y: 0, width: 0, height: 0 });
-  
   const [sliderLayout, setSliderLayout] = useState({ y: 0, height: 0 });
   const sliderTrackRef = useRef(null);
   const [isSliding, setIsSliding] = useState(false);
@@ -276,73 +295,45 @@ const CreateMemeScreen = () => {
     });
   };
 
-  // активация пипетки
   const activateEyedropper = () => {
+    if (!image) return Alert.alert("Ошибка", "Сначала выберите изображение");
     setEyedropperActive(true);
     setMagnifierVisible(true);
   };
+  
 
-  // обработка касаний
   const handleTouchMove = (e) => {
     if (!imageLayout) return;
   
     const { pageX, pageY } = e.nativeEvent;
-  
-    // координаты внутри изображения
     const localX = pageX - imageLayout.x;
     const localY = pageY - imageLayout.y;
   
-    // ограничиваем координаты рамками изображения
-    const clampedX = Math.max(0, Math.min(imageLayout.width, localX));
-    const clampedY = Math.max(0, Math.min(imageLayout.height, localY));
+    const isInsideImage = localX >= 0 && localX <= imageLayout.width && localY >= 0 && localY <= imageLayout.height;
+    if (!isInsideImage) return;
   
+    const clampedX = Math.max(0, Math.min(imageLayout.width - 1, localX));
+    const clampedY = Math.max(0, Math.min(imageLayout.height - 1, localY));
     setMagnifierPos({ x: clampedX, y: clampedY });
   };
-  
-  const handleTouchEnd = async (e) => {
-    if (!eyedropperActive || !imageLayout) return;
-  
-    // Берем координаты центра лупы (а не пальца)
-    const centerX = magnifierPos.x;
-    const centerY = magnifierPos.y;
-  
-    // берем цвет пикселя под красным кружочком
-    await handlePickColor(centerX, centerY);
-  
-    setEyedropperActive(false);
-    setMagnifierVisible(false);
-  };
 
-  const handlePickColor = async (x, y) => {
-    if (!viewShotRef.current || !image) return;
-  
-    try {
-      const uri = await viewShotRef.current.capture();
-      const { width, height } = imageLayout;
-  
-      // масштабируем к размеру захваченного изображения
-      const imgSize = await new Promise((resolve) => {
-        Image.getSize(uri, (imgWidth, imgHeight) => {
-          resolve({ imgWidth, imgHeight });
-        });
-      });
-  
-      const scaledX = Math.round((x / width) * imgSize.imgWidth);
-      const scaledY = Math.round((y / height) * imgSize.imgHeight);
-  
-      console.log(`Picking color at: ${scaledX}, ${scaledY} from image ${imgSize.imgWidth}x${imgSize.imgHeight}`);
-  
-      const pickedColor = await PixelColor.getHex(uri, { x: scaledX, y: scaledY });
-      console.log("Picked color:", pickedColor);
-      
-      setBrushColor(pickedColor);
-      setEyedropperActive(false);
-      setMagnifierVisible(false);
-    } catch (err) {
-      console.warn("Ошибка выбора цвета:", err);
+  const handleTouchEnd = async () => {
+    if (image && magnifierRef.current) {
+      // Получаем цвет под центром лупы
+      const color = await magnifierRef.current.getColorAt(
+        Math.floor(magnifierPos.x),
+        Math.floor(magnifierPos.y)
+      );
+      if (color) {
+        setBrushColor(color);
+        console.log("Выбранный цвет:", color);
+      }
     }
+    
+    setMagnifierVisible(false);
+    setEyedropperActive(false);
   };
-
+  
   const panResponder = PanResponder.create({
     onStartShouldSetPanResponder: () => true,
     onMoveShouldSetPanResponder: () => true,
@@ -361,6 +352,12 @@ const CreateMemeScreen = () => {
   }));
 
   const addPath = (d, color, type, start, end) => {
+    // Проверяем валидность цвета перед сохранением
+    const validColor = color && color.startsWith('#') && 
+                     (color.length === 7 || color.length === 9) 
+                     ? color 
+                     : "#FFFFFF";
+  
     if (type === "arrow" && start && end) {
       const angle = Math.atan2(end.y - start.y, end.x - start.x);
       const arrowLength = 15;
@@ -378,7 +375,7 @@ const CreateMemeScreen = () => {
         ...prev,
         { 
           d: arrowD, 
-          color, 
+          color: validColor,
           strokeWidth: brushSize, 
           type, 
           start, 
@@ -389,19 +386,59 @@ const CreateMemeScreen = () => {
     } else {
       setDrawingPaths((prev) => [
         ...prev,
-        { d, color, strokeWidth: brushSize, type, start, end },
+        { d, color: validColor, strokeWidth: brushSize, type, start, end },
       ]);
     }
   };
 
-  const toggleBrushType = () => {
-    setBrushType((prev) => {
-      if (prev === "pen") return "marker";
-      if (prev === "marker") return "arrow";
-      if (prev === "arrow") return "pen";
-      return "pen";
-    });
-  };
+  useEffect(() => {
+    if (!image || !glContextRef.current || !imageLayout.width || !imageLayout.height) return;
+  
+    const loadImageToGL = async () => {
+      try {
+        const ctx = glContextRef.current;
+        if (!ctx) return;
+  
+        // Используем expo-asset для правильной загрузки
+        const asset = Asset.fromURI(image);
+        await asset.downloadAsync();
+  
+        if (!asset.localUri) {
+          console.error("❌ Не удалось загрузить локальный URI");
+          return;
+        }
+  
+        // Создаем изображение через React Native Image
+        Image.getSize(asset.localUri, (width, height) => {
+          ctx.clearRect(0, 0, imageLayout.width, imageLayout.height);
+          
+          // Рисуем изображение с правильными пропорциями
+          const scale = Math.min(imageLayout.width / width, imageLayout.height / height);
+          const drawWidth = width * scale;
+          const drawHeight = height * scale;
+          const x = (imageLayout.width - drawWidth) / 2;
+          const y = (imageLayout.height - drawHeight) / 2;
+          
+          ctx.drawImage(asset.localUri, x, y, drawWidth, drawHeight);
+          ctx.flush();
+          console.log("✅ Изображение загружено в GLContext");
+        });
+        
+      } catch (err) {
+        console.error("Ошибка при drawImage в GLContext:", err);
+      }
+    };
+  
+    loadImageToGL();
+  }, [image, glContextRef.current, imageLayout.width, imageLayout.height]);
+
+  useEffect(() => {
+    if (brushColor && brushColor.startsWith('#') && (brushColor.length === 7 || brushColor.length === 9)) {
+      currentPathColor.value = brushColor;
+    } else {
+      currentPathColor.value = "#FFFFFF";
+    }
+  }, [brushColor]);
 
   const startPoint = useSharedValue(null);
 
@@ -590,7 +627,12 @@ const CreateMemeScreen = () => {
   };
 
   const handleBrushType = () => {
-    toggleBrushType();
+    setBrushType((prev) => {
+      if (prev === "pen") return "marker";
+      if (prev === "marker") return "arrow";
+      if (prev === "arrow") return "pen";
+      return "pen";
+    });
   };
 
   const handleColorPicker = () => {
@@ -598,7 +640,13 @@ const CreateMemeScreen = () => {
   };
 
   const handleColorSelect = (color) => {
-    setBrushColor(color);
+    // Проверяем, что это валидный hex цвет
+    if (color && color.startsWith('#') && (color.length === 7 || color.length === 9)) {
+      setBrushColor(color);
+    } else {
+      console.warn('Invalid color selected:', color);
+      setBrushColor("#FFFFFF"); // фолбэк на белый
+    }
   };
 
   const getBrushIcon = () => {
@@ -612,13 +660,21 @@ const CreateMemeScreen = () => {
 
   const renderDrawingPaths = () => {
     return drawingPaths.map((p, i) => {
+      // Проверяем валидность цвета
+      const isValidColor = p.color && p.color.startsWith('#') && 
+                          (p.color.length === 7 || p.color.length === 9);
+      const strokeColor = isValidColor ? p.color : "#FFFFFF";
+      
+      // Проверяем валидность ширины линии
+      const strokeWidth = p.strokeWidth && p.strokeWidth > 0 ? p.strokeWidth : 5;
+  
       if (p.type !== "arrow" || !p.start || !p.end) {
         return (
           <Path
             key={i}
             d={p.d}
-            stroke={p.color}
-            strokeWidth={p.strokeWidth}
+            stroke={strokeColor}
+            strokeWidth={strokeWidth}
             fill="none"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -627,31 +683,32 @@ const CreateMemeScreen = () => {
           />
         );
       }
-
+  
+      // Обработка стрелок
       const angle = Math.atan2(p.end.y - p.start.y, p.end.x - p.start.x);
-      const len = 15;
-      const theta = Math.PI / 6;
-
-      const x1 = p.end.x - len * Math.cos(angle - theta);
-      const y1 = p.end.y - len * Math.sin(angle - theta);
-
-      const x2 = p.end.x - len * Math.cos(angle + theta);
-      const y2 = p.end.y - len * Math.sin(angle + theta);
-
+      const arrowLength = 15;
+      const arrowAngle = Math.PI / 6;
+  
+      const x1 = p.end.x - arrowLength * Math.cos(angle - arrowAngle);
+      const y1 = p.end.y - arrowLength * Math.sin(angle - arrowAngle);
+  
+      const x2 = p.end.x - arrowLength * Math.cos(angle + arrowAngle);
+      const y2 = p.end.y - arrowLength * Math.sin(angle + arrowAngle);
+  
       return (
         <React.Fragment key={i}>
           <Path
             d={p.d}
-            stroke={p.color}
-            strokeWidth={p.strokeWidth}
+            stroke={strokeColor}
+            strokeWidth={strokeWidth}
             fill="none"
             strokeLinecap="round"
             strokeLinejoin="round"
           />
           <Path
             d={`M ${p.end.x},${p.end.y} L ${x1},${y1} M ${p.end.x},${p.end.y} L ${x2},${y2}`}
-            stroke={p.color}
-            strokeWidth={p.strokeWidth}
+            stroke={strokeColor}
+            strokeWidth={strokeWidth}
             strokeLinecap="round"
           />
         </React.Fragment>
@@ -661,7 +718,7 @@ const CreateMemeScreen = () => {
 
   return (
     <ScrollView
-    scrollEnabled={!eyedropperActive}
+      scrollEnabled={!eyedropperActive}
       style={{ flex: 1, backgroundColor: isDark ? "#0F111E" : "#EAF0FF" }}
       contentContainerStyle={styles.container}
     >
@@ -704,6 +761,13 @@ const CreateMemeScreen = () => {
           </TouchableOpacity>
         ))}
       </ScrollView>
+      <GLView
+  style={{ width: 1, height: 1, opacity: 0 }}
+  onContextCreate={(gl) => {
+    const ctx = new Expo2DContext(gl);
+    glContextRef.current = ctx;
+  }}
+/>
 
       <ScrollView horizontal style={{ marginBottom: 8 }}>
         {filterOptions.map((f) => (
@@ -721,7 +785,6 @@ const CreateMemeScreen = () => {
       </ScrollView>
 
       <ViewShot ref={viewShotRef} options={{ format: "jpg", quality: 0.9 }}>
-        {/* измеряем изображение */}
         <View
           ref={imageRef}
           style={styles.previewContainer}
@@ -731,7 +794,6 @@ const CreateMemeScreen = () => {
             });
           }}
         >
-          {/* Основное изображение с фильтром */}
           {image ? (
             <FilteredImage uri={image} filter={filter} style={styles.image} />
           ) : (
@@ -747,17 +809,40 @@ const CreateMemeScreen = () => {
             </View>
           )}
 
-{/* Лупа */}
 {magnifierVisible && image && (
-  <Magnifier
-    imageUri={image}
-    x={magnifierPos.x}
-    y={magnifierPos.y}
-    size={120}
-    zoom={3}
-    imageWidth={imageLayout.width}
-    imageHeight={imageLayout.height}
-  />
+  <View
+    style={{
+      position: "absolute",
+      left: magnifierPos.x - 60,
+      top: magnifierPos.y - 60,
+      width: 120,
+      height: 120,
+      borderRadius: 60,
+      borderWidth: 2,
+      borderColor: "#16DBBE",
+      overflow: "hidden",
+      zIndex: 1000,
+    }}
+  >
+    <PixelPicker
+      imageUri={image}
+      x={Math.floor(magnifierPos.x)}
+      y={Math.floor(magnifierPos.y)}
+      size={120}
+      zoom={3}
+      onColorPicked={(color) => setBrushColor(color)}
+    />
+  </View>
+)}
+
+{eyedropperActive && (
+  <View style={{ position: 'absolute', top: 100, left: 10, backgroundColor: 'rgba(0,0,0,0.7)', padding: 10, zIndex: 1000 }}>
+    <Text style={{ color: '#fff', fontSize: 12 }}>
+      Отладка:{'\n'}
+      Координаты: {Math.round(magnifierPos.x)}, {Math.round(magnifierPos.y)}{'\n'}
+      Размер изображения: {imageLayout.width}x{imageLayout.height}
+    </Text>
+  </View>
 )}
 
           {/* Рисунки и линии */}
@@ -765,22 +850,26 @@ const CreateMemeScreen = () => {
             <Svg style={StyleSheet.absoluteFill}>
               {renderDrawingPaths()}
               {isDrawingMode && (
-                <AnimatedPath
-                  animatedProps={animatedPathProps}
-                  strokeWidth={brushSize}
-                  fill="none"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeOpacity={brushType === "marker" ? 0.6 : 1}
-                  strokeDasharray={
-                    brushType === "marker"
-                      ? "5,3"
-                      : brushType === "arrow"
-                      ? "10,5"
-                      : null
-                  }
-                />
-              )}
+  <AnimatedPath
+    animatedProps={animatedPathProps}
+    strokeWidth={brushSize}
+    fill="none"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    strokeOpacity={brushType === "marker" ? 0.6 : 1}
+    strokeDasharray={
+      brushType === "marker"
+        ? "5,3"
+        : brushType === "arrow"
+        ? "10,5"
+        : null
+    }
+    stroke={brushColor && brushColor.startsWith('#') && 
+           (brushColor.length === 7 || brushColor.length === 9) 
+           ? brushColor 
+           : "#FFFFFF"}
+  />
+)}
             </Svg>
           </View>
 
@@ -893,31 +982,11 @@ const CreateMemeScreen = () => {
                     </TouchableOpacity>
 
                     {[
-                      "#ffffff",
-                      "#000000",
-                      "#FF0000",
-                      "#00FF00",
-                      "#0000FF",
-                      "#FFFF00",
-                      "#FF00FF",
-                      "#00FFFF",
-                      "#FFA500",
-                      "#800080",
-                      "#FFC0CB",
-                      "#008000",
-                      "#800000",
-                      "#000080",
-                      "#808080",
-                      "#A52A2A",
-                      "#FFD700",
-                      "#DA70D6",
-                      "#FF6347",
-                      "#40E0D0",
-                      "#EE82EE",
-                      "#F5DEB3",
-                      "#9ACD32",
-                      "#FF4500",
-                      "#6A5ACD",
+                      "#ffffff", "#000000", "#FF0000", "#00FF00", "#0000FF",
+                      "#FFFF00", "#FF00FF", "#00FFFF", "#FFA500", "#800080",
+                      "#FFC0CB", "#008000", "#800000", "#000080", "#808080",
+                      "#A52A2A", "#FFD700", "#DA70D6", "#FF6347", "#40E0D0",
+                      "#EE82EE", "#F5DEB3", "#9ACD32", "#FF4500", "#6A5ACD",
                     ].map((color) => (
                       <TouchableOpacity
                         key={color}
@@ -1001,7 +1070,7 @@ const CreateMemeScreen = () => {
               setMagnifierVisible(false);
             }
             setIsDrawingMode((prev) => !prev);
-            setShowColorPicker(false); // Закрываем палитру при выходе из режима рисования
+            setShowColorPicker(false);
           }}
           disabled={!image}
         >
