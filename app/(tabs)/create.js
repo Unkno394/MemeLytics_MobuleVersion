@@ -279,6 +279,7 @@ const CreateMemeScreen = () => {
   const currentPathD = useSharedValue("");
   const currentPathColor = useSharedValue("#FF0000");
   const [eyedropperActive, setEyedropperActive] = useState(false);
+  const lastPickedColor = useRef("#FFFFFF");
 
   const handleSliderMove = (pageY) => {
     if (!sliderLayout.height || !sliderLayout.y) return;
@@ -303,36 +304,25 @@ const CreateMemeScreen = () => {
   
 
   const handleTouchMove = (e) => {
-    if (!imageLayout) return;
-  
     const { pageX, pageY } = e.nativeEvent;
     const localX = pageX - imageLayout.x;
     const localY = pageY - imageLayout.y;
-  
     const isInsideImage = localX >= 0 && localX <= imageLayout.width && localY >= 0 && localY <= imageLayout.height;
     if (!isInsideImage) return;
-  
-    const clampedX = Math.max(0, Math.min(imageLayout.width - 1, localX));
-    const clampedY = Math.max(0, Math.min(imageLayout.height - 1, localY));
-    setMagnifierPos({ x: clampedX, y: clampedY });
+    setMagnifierPos({ x: localX, y: localY });
   };
+  
 
-  const handleTouchEnd = async () => {
-    if (image && magnifierRef.current) {
-      // Получаем цвет под центром лупы
-      const color = await magnifierRef.current.getColorAt(
-        Math.floor(magnifierPos.x),
-        Math.floor(magnifierPos.y)
-      );
-      if (color) {
-        setBrushColor(color);
-        console.log("Выбранный цвет:", color);
-      }
+  const handleTouchEnd = () => {
+    const color = magnifierRef.current?.getPickedColor() || lastPickedColor.current;
+    if (color) {
+      setBrushColor(color);
+      console.log("🎨 Выбранный цвет:", color);
     }
-    
     setMagnifierVisible(false);
     setEyedropperActive(false);
   };
+  
   
   const panResponder = PanResponder.create({
     onStartShouldSetPanResponder: () => true,
@@ -817,23 +807,24 @@ const CreateMemeScreen = () => {
       top: magnifierPos.y - 60,
       width: 120,
       height: 120,
-      borderRadius: 60,
-      borderWidth: 2,
-      borderColor: "#16DBBE",
-      overflow: "hidden",
-      zIndex: 1000,
     }}
   >
-    <PixelPicker
+    <Magnifier
+      ref={magnifierRef}
       imageUri={image}
       x={Math.floor(magnifierPos.x)}
       y={Math.floor(magnifierPos.y)}
       size={120}
       zoom={3}
-      onColorPicked={(color) => setBrushColor(color)}
+      onColorPicked={(color) => {
+        lastPickedColor.current = color; // сохраняем для handleTouchEnd
+      }}
     />
   </View>
 )}
+
+
+
 
 {eyedropperActive && (
   <View style={{ position: 'absolute', top: 100, left: 10, backgroundColor: 'rgba(0,0,0,0.7)', padding: 10, zIndex: 1000 }}>
