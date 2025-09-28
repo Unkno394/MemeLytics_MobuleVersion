@@ -44,6 +44,7 @@ import PixelPicker  from "../../components/ColorPicker.js";
 import { GLView } from "expo-gl";
 import Expo2DContext from "expo-2d-context";
 import { Asset } from "expo-asset";
+import CustomAlert from '../../components/CustomAlert';
 
 
 
@@ -468,7 +469,48 @@ const CreateMemeScreen = () => {
     width: SCREEN_WIDTH, 
     height: SCREEN_WIDTH 
   });
+  const [alertVisible, setAlertVisible] = useState(false);
+const [alertConfig, setAlertConfig] = useState({
+  title: '',
+  message: '',
+  buttons: []
+});
+const showAlert = (title, message, buttons) => {
+  setAlertConfig({ title, message, buttons });
+  setAlertVisible(true);
+};
+const showError = (message) => {
+  showAlert('Ошибка', message, [
+    { text: 'OK', onPress: () => setAlertVisible(false) }
+  ]);
+};
+const showSuccess = (message, onOk) => {
+  showAlert('Успех', message, [
+    { text: 'OK', onPress: () => {
+      setAlertVisible(false);
+      onOk?.();
+    }}
+  ]);
+};
 
+const showConfirm = (title, message, onConfirm, onCancel) => {
+  showAlert(title, message, [
+    { 
+      text: 'Отмена', 
+      onPress: () => {
+        setAlertVisible(false);
+        onCancel?.();
+      }
+    },
+    { 
+      text: 'OK', 
+      onPress: () => {
+        setAlertVisible(false);
+        onConfirm?.();
+      }
+    }
+  ]);
+};
   const handleSliderMove = (pageY) => {
     if (!sliderLayout.height || !sliderLayout.y) return;
     const relativeY = pageY - sliderLayout.y;
@@ -485,7 +527,7 @@ const CreateMemeScreen = () => {
   };
 
   const activateEyedropper = () => {
-    if (!image) return Alert.alert("Ошибка", "Сначала выберите изображение");
+    if (!image) return showError("Сначала выберите изображение");
     setEyedropperActive(true);
     setMagnifierVisible(true);
   };
@@ -760,6 +802,7 @@ useEffect(() => {
       const selectedImage = result.assets[0].uri;
       setImage(selectedImage);
       updateImageDimensions(selectedImage);
+    } else {
     }
   };
   
@@ -792,7 +835,7 @@ useEffect(() => {
     isDrawing.value = false;
     currentPathD.value = "";
     
-    Alert.alert("Черновик", "Черновик удалён");
+    showSuccess("Черновик удалён");
   };
 
   const addTextBlock = () => {
@@ -819,28 +862,23 @@ useEffect(() => {
   };
 
   const saveMeme = async () => {
-    if (!image) return Alert.alert("Ошибка", "Выберите изображение для мема");
+    if (!image) return showError("Выберите изображение для мема");
+    
     setIsLoading(true);
     try {
       const { status } = await MediaLibrary.requestPermissionsAsync();
-      if (status !== "granted") return Alert.alert("Ошибка", "Нет доступа к галерее");
+      if (status !== "granted") return showError("Нет доступа к галерее");
+      
       const uri = await viewShotRef.current.capture();
       await MediaLibrary.saveToLibraryAsync(uri);
       await AsyncStorage.removeItem(DRAFT_KEY);
-      Alert.alert("Успех", "Мем сохранён!", [
-        {
-          text: "OK",
-          onPress: () => {
-            setImage(null);
-            setTextBlocks([]);
-            setDrawingPaths([]);
-            navigation.goBack();
-          },
-        },
-      ]);
+      showSuccess("Мем сохранён!", () => {
+        navigation.goBack();
+      });
+      
     } catch (err) {
       console.error(err);
-      Alert.alert("Ошибка", "Не удалось сохранить мем.");
+      showError("Не удалось сохранить мем.");
     } finally {
       setIsLoading(false);
     }
@@ -1347,15 +1385,15 @@ useEffect(() => {
   </TouchableOpacity>
   
   <TouchableOpacity 
-    style={[styles.menuButton, (!image) && styles.disabledButton]} 
-    onPress={() => Alert.alert("Стикеры", "Добавление стикеров")}
-    disabled={!image}
-  >
-    <View style={styles.menuItem}>
-      <Icon name="emoji-emotions" size={16} color={!image ? "#888" : "#fff"} />
-      <Text style={[styles.menuText, (!image) && styles.disabledText]}>Стикеры</Text>
-    </View>
-  </TouchableOpacity>
+  style={[styles.menuButton, (!image) && styles.disabledButton]} 
+  onPress={() => showError("Функция стикеров в разработке")}
+  disabled={!image}
+>
+  <View style={styles.menuItem}>
+    <Icon name="emoji-emotions" size={16} color={!image ? "#888" : "#fff"} />
+    <Text style={[styles.menuText, (!image) && styles.disabledText]}>Стикеры</Text>
+  </View>
+</TouchableOpacity>
 </View>
 
 <TouchableOpacity
@@ -1374,6 +1412,13 @@ useEffect(() => {
 
         <View style={{ height: 50 }} />
       </ScrollView>
+      <CustomAlert
+      visible={alertVisible}
+      title={alertConfig.title}
+      message={alertConfig.message}
+      buttons={alertConfig.buttons}
+      onClose={() => setAlertVisible(false)}
+    />
     </View>
   );
 };
