@@ -45,26 +45,22 @@ import { GLView } from "expo-gl";
 import Expo2DContext from "expo-2d-context";
 import { Asset } from "expo-asset";
 
+
+
 LogBox.ignoreLogs([
   "Warning: Cannot update a component from inside the function body of a different component",
 ]);
 
 async function loadImageToGL(uri) {
   try {
-    // Если URI уже локальный, Asset.fromURI всё равно вернёт его
     const asset = Asset.fromURI(uri);
-
-    // Скачиваем, если это удалённый ресурс
     await asset.downloadAsync();
-
-    // Возвращаем локальный URI, который можно передавать в ctx.drawImage
     return asset.localUri;
   } catch (e) {
     console.error("Ошибка загрузки изображения для GL:", e);
     return null;
   }
 }
-
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const AnimatedPath = Animated.createAnimatedComponent(Path);
@@ -89,7 +85,7 @@ const memeTemplates = [
 
 const DRAFT_KEY = "MEME_DRAFT_v3";
 
-// Обновленный DraggableText с поддержкой блокировки
+// DraggableText с отключенными жестами в режиме рисования
 const DraggableText = ({
   id,
   text,
@@ -102,6 +98,9 @@ const DraggableText = ({
   startY = 0,
   onOpenEditor,
   disabled = false,
+  containerWidth = SCREEN_WIDTH,
+  containerHeight = SCREEN_WIDTH,
+  isDrawingMode = false,
 }) => {
   const translateX = useSharedValue(startX);
   const translateY = useSharedValue(startY);
@@ -113,48 +112,97 @@ const DraggableText = ({
   const savedScale = useSharedValue(1);
   const savedRotation = useSharedValue(0);
 
+  const textRef = useRef(null);
+  const [textDimensions, setTextDimensions] = useState({ width: 0, height: 0 });
+
+  const TOP_PANEL_HEIGHT = 120;
+  const BOTTOM_PANEL_HEIGHT = 100;
+  const SIDE_PANEL_WIDTH = 50;
+
+  const onTextLayout = (event) => {
+    const { width, height } = event.nativeEvent.layout;
+    setTextDimensions({ width, height });
+  };
+
+  const clampToContainer = (x, y, currentScale) => {
+    'worklet';
+    const scaledWidth = textDimensions.width * currentScale;
+    const scaledHeight = textDimensions.height * currentScale;
+    
+    const minX = -SIDE_PANEL_WIDTH;
+    const maxX = containerWidth + SIDE_PANEL_WIDTH;
+    
+    const minY = -TOP_PANEL_HEIGHT;
+    const maxY = containerHeight + BOTTOM_PANEL_HEIGHT - scaledHeight;
+    
+    return {
+      x: Math.max(minX, Math.min(maxX, x)),
+      y: Math.max(minY, Math.min(maxY, y)),
+    };
+  };
+
+  // Отключаем жесты в режиме рисования
   const panGesture = Gesture.Pan()
-    .enabled(!disabled)
+    .enabled(!disabled && !isDrawingMode)
     .onBegin(() => {
-      if (disabled) return;
+      'worklet';
+      if (disabled || isDrawingMode) return;
       savedX.value = translateX.value;
       savedY.value = translateY.value;
     })
     .onUpdate((e) => {
-      if (disabled) return;
-      translateX.value = savedX.value + e.translationX;
-      translateY.value = savedY.value + e.translationY;
+      'worklet';
+      if (disabled || isDrawingMode) return;
+      
+      const newX = savedX.value + e.translationX;
+      const newY = savedY.value + e.translationY;
+      
+      const clamped = clampToContainer(newX, newY, scale.value);
+      
+      translateX.value = clamped.x;
+      translateY.value = clamped.y;
     });
 
   const pinchGesture = Gesture.Pinch()
-    .enabled(!disabled)
+    .enabled(!disabled && !isDrawingMode)
     .hitSlop(250)
     .onBegin(() => {
-      if (disabled) return;
+      'worklet';
+      if (disabled || isDrawingMode) return;
       savedScale.value = scale.value;
     })
     .onUpdate((e) => {
-      if (disabled) return;
-      scale.value = Math.max(0.5, Math.min(4, savedScale.value * e.scale));
+      'worklet';
+      if (disabled || isDrawingMode) return;
+      const newScale = Math.max(0.5, Math.min(4, savedScale.value * e.scale));
+      scale.value = newScale;
+      
+      const clamped = clampToContainer(translateX.value, translateY.value, newScale);
+      
+      translateX.value = clamped.x;
+      translateY.value = clamped.y;
     });
 
   const rotationGesture = Gesture.Rotation()
-    .enabled(!disabled)
+    .enabled(!disabled && !isDrawingMode)
     .hitSlop(250)
     .onBegin(() => {
-      if (disabled) return;
+      'worklet';
+      if (disabled || isDrawingMode) return;
       savedRotation.value = rotation.value;
     })
     .onUpdate((e) => {
-      if (disabled) return;
+      'worklet';
+      if (disabled || isDrawingMode) return;
       rotation.value = savedRotation.value + e.rotation;
     });
 
   const tapGesture = Gesture.Tap()
-    .enabled(!disabled)
+    .enabled(!disabled && !isDrawingMode)
     .maxDuration(250)
     .onEnd(() => {
-      if (disabled) return;
+      'worklet';
+      if (disabled || isDrawingMode) return;
       runOnJS(onOpenEditor)?.({
         id,
         text,
@@ -186,6 +234,7 @@ const DraggableText = ({
     left: 0,
     top: 0,
     opacity: disabled ? 0.7 : 1,
+    zIndex: 2,
   }));
 
   return (
@@ -200,6 +249,8 @@ const DraggableText = ({
           }}
         >
           <Text
+            ref={textRef}
+            onLayout={onTextLayout}
             style={{
               fontSize,
               color,
@@ -221,25 +272,158 @@ const DraggableText = ({
 
 const FilteredImage = ({ filter, uri, style }) => {
   if (!uri) return <View style={[style, { backgroundColor: "#ccc" }]} />;
-  const img = <Image source={{ uri }} style={style} />;
+  
+  const imageElement = <Image source={{ uri }} style={style} />;
+  
+  // Применяем фильтры только если они не "none"
+  if (filter === "none") {
+    return imageElement;
+  }
+
   switch (filter) {
     case "grayscale":
-      return <Grayscale>{img}</Grayscale>;
+      return <Grayscale>{imageElement}</Grayscale>;
     case "sepia":
-      return <Sepia>{img}</Sepia>;
+      return <Sepia>{imageElement}</Sepia>;
     case "invert":
-      return <Invert>{img}</Invert>;
+      return <Invert>{imageElement}</Invert>;
     case "contrast":
-      return <Contrast amount={2.0}>{img}</Contrast>;
+      return <Contrast amount={2.0}>{imageElement}</Contrast>;
     case "brightness":
-      return <Brightness amount={1.4}>{img}</Brightness>;
+      return <Brightness amount={1.4}>{imageElement}</Brightness>;
     case "saturate":
-      return <Saturate amount={2.0}>{img}</Saturate>;
+      return <Saturate amount={2.0}>{imageElement}</Saturate>;
     case "hue":
-      return <HueRotate amount={Math.PI / 2}>{img}</HueRotate>;
+      return <HueRotate amount={Math.PI / 2}>{imageElement}</HueRotate>;
     default:
-      return img;
+      return imageElement;
   }
+};
+
+const ScalableFilteredImage = ({ 
+  filter, 
+  uri, 
+  style, 
+  isDrawingMode = false 
+}) => {
+  const translateX = useSharedValue(0);
+  const translateY = useSharedValue(0);
+  const scale = useSharedValue(1);
+  const rotation = useSharedValue(0);
+  const savedScale = useSharedValue(1);
+  const savedRotation = useSharedValue(0);
+  const savedX = useSharedValue(0);
+  const savedY = useSharedValue(0);
+
+  // Жест панорамирования (перемещение)
+  const panGesture = Gesture.Pan()
+    .enabled(!isDrawingMode)
+    .onBegin(() => {
+      'worklet';
+      if (isDrawingMode) return;
+      savedX.value = translateX.value;
+      savedY.value = translateY.value;
+    })
+    .onUpdate((e) => {
+      'worklet';
+      if (isDrawingMode) return;
+      translateX.value = savedX.value + e.translationX;
+      translateY.value = savedY.value + e.translationY;
+    });
+
+  // Жест масштабирования
+  const pinchGesture = Gesture.Pinch()
+    .enabled(!isDrawingMode)
+    .onBegin(() => {
+      'worklet';
+      if (isDrawingMode) return;
+      savedScale.value = scale.value;
+    })
+    .onUpdate((e) => {
+      'worklet';
+      if (isDrawingMode) return;
+      scale.value = Math.max(0.5, Math.min(3, savedScale.value * e.scale));
+    });
+
+  // Жест вращения
+  const rotationGesture = Gesture.Rotation()
+    .enabled(!isDrawingMode)
+    .onBegin(() => {
+      'worklet';
+      if (isDrawingMode) return;
+      savedRotation.value = rotation.value;
+    })
+    .onUpdate((e) => {
+      'worklet';
+      if (isDrawingMode) return;
+      rotation.value = savedRotation.value + e.rotation;
+    });
+
+  // Комбинируем жесты
+  const composedGesture = Gesture.Simultaneous(
+    panGesture,
+    Gesture.Simultaneous(pinchGesture, rotationGesture)
+  );
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: translateX.value },
+      { translateY: translateY.value },
+      { scale: scale.value },
+      { rotate: `${rotation.value}rad` },
+    ],
+  }));
+
+  if (!uri) return <View style={[style, { backgroundColor: "#ccc" }]} />;
+  
+  const imageElement = (
+    <Animated.View style={[style, animatedStyle, { overflow: 'hidden' }]}>
+      <Image 
+        source={{ uri }} 
+        style={{ 
+          width: '100%', 
+          height: '100%',
+          resizeMode: 'contain'
+        }} 
+      />
+    </Animated.View>
+  );
+  
+  // Применяем фильтры только если они не "none"
+  if (filter === "none") {
+    return (
+      <GestureDetector gesture={composedGesture}>
+        {imageElement}
+      </GestureDetector>
+    );
+  }
+
+  const filteredElement = (() => {
+    switch (filter) {
+      case "grayscale":
+        return <Grayscale>{imageElement}</Grayscale>;
+      case "sepia":
+        return <Sepia>{imageElement}</Sepia>;
+      case "invert":
+        return <Invert>{imageElement}</Invert>;
+      case "contrast":
+        return <Contrast amount={2.0}>{imageElement}</Contrast>;
+      case "brightness":
+        return <Brightness amount={1.4}>{imageElement}</Brightness>;
+      case "saturate":
+        return <Saturate amount={2.0}>{imageElement}</Saturate>;
+      case "hue":
+        return <HueRotate amount={Math.PI / 2}>{imageElement}</HueRotate>;
+      default:
+        return imageElement;
+    }
+  })();
+
+  return (
+    <GestureDetector gesture={composedGesture}>
+      {filteredElement}
+    </GestureDetector>
+  );
 };
 
 const CreateMemeScreen = () => {
@@ -247,11 +431,11 @@ const CreateMemeScreen = () => {
   const { isDark } = useContext(ThemeContext);
   const navigation = useNavigation();
   const magnifierRef = useRef(null);
-  // useState для лупы
+  const [screenPos, setScreenPos] = useState({ x: 0, y: 0 });
+  const [imagePos, setImagePos] = useState({ x: 0, y: 0 });
   const [magnifierVisible, setMagnifierVisible] = useState(false);
   const [magnifierPos, setMagnifierPos] = useState({ x: 0, y: 0 });
   const glContextRef = useRef(null);
-  // ref на контейнер изображения
   const imageRef = useRef(null);
   const [imageLayout, setImageLayout] = useState({ x: 0, y: 0, width: 0, height: 0 });
   const [sliderLayout, setSliderLayout] = useState({ y: 0, height: 0 });
@@ -280,6 +464,10 @@ const CreateMemeScreen = () => {
   const currentPathColor = useSharedValue("#FF0000");
   const [eyedropperActive, setEyedropperActive] = useState(false);
   const lastPickedColor = useRef("#FFFFFF");
+  const [imageDimensions, setImageDimensions] = useState({ 
+    width: SCREEN_WIDTH, 
+    height: SCREEN_WIDTH 
+  });
 
   const handleSliderMove = (pageY) => {
     if (!sliderLayout.height || !sliderLayout.y) return;
@@ -301,17 +489,64 @@ const CreateMemeScreen = () => {
     setEyedropperActive(true);
     setMagnifierVisible(true);
   };
+  const updateImageDimensions = (uri) => {
+    if (!uri) {
+      setImageDimensions({ width: SCREEN_WIDTH, height: SCREEN_WIDTH });
+      return;
+    }
+    
+    Image.getSize(uri, (width, height) => {
+      // Вычисляем высоту на основе реальных пропорций изображения
+      const aspectRatio = height / width;
+      const calculatedHeight = SCREEN_WIDTH * aspectRatio;
+      
+      // Устанавливаем минимальную и максимальную высоту для удобства
+      const minHeight = 200; // минимальная высота
+      const maxHeight = SCREEN_WIDTH * 2; // максимальная высота (в 2 раза больше ширины)
+      
+      setImageDimensions({
+        width: SCREEN_WIDTH,
+        height: Math.max(minHeight, Math.min(maxHeight, calculatedHeight))
+      });
+    }, (error) => {
+      console.error("Ошибка получения размеров изображения:", error);
+      setImageDimensions({ width: SCREEN_WIDTH, height: SCREEN_WIDTH });
+    });
+  };
   
-
   const handleTouchMove = (e) => {
+    if (!image || !imageLayout.width || !imageDimensions.height) return;
+  
     const { pageX, pageY } = e.nativeEvent;
     const localX = pageX - imageLayout.x;
     const localY = pageY - imageLayout.y;
-    const isInsideImage = localX >= 0 && localX <= imageLayout.width && localY >= 0 && localY <= imageLayout.height;
-    if (!isInsideImage) return;
-    setMagnifierPos({ x: localX, y: localY });
-  };
   
+    const isInsideImage =
+      localX >= 0 && localX <= imageLayout.width &&
+      localY >= 0 && localY <= imageDimensions.height;
+    if (!isInsideImage) return;
+  
+    Image.getSize(image, (imgW, imgH) => {
+      const scale = Math.min(
+        imageLayout.width / imgW,
+        imageDimensions.height / imgH
+      );
+  
+      const drawW = imgW * scale;
+      const drawH = imgH * scale;
+  
+      const offsetX = (imageLayout.width - drawW) / 2;
+      const offsetY = (imageDimensions.height - drawH) / 2;
+  
+      const normX = (localX - offsetX) / drawW;
+      const normY = (localY - offsetY) / drawH;
+  
+      const imgX = Math.round(normX * imgW);
+      const imgY = Math.round(normY * imgH);
+  
+      setMagnifierPos({ x: imgX, y: imgY });
+    });
+  };
 
   const handleTouchEnd = () => {
     const color = magnifierRef.current?.getPickedColor() || lastPickedColor.current;
@@ -322,8 +557,7 @@ const CreateMemeScreen = () => {
     setMagnifierVisible(false);
     setEyedropperActive(false);
   };
-  
-  
+
   const panResponder = PanResponder.create({
     onStartShouldSetPanResponder: () => true,
     onMoveShouldSetPanResponder: () => true,
@@ -342,7 +576,6 @@ const CreateMemeScreen = () => {
   }));
 
   const addPath = (d, color, type, start, end) => {
-    // Проверяем валидность цвета перед сохранением
     const validColor = color && color.startsWith('#') && 
                      (color.length === 7 || color.length === 9) 
                      ? color 
@@ -381,46 +614,44 @@ const CreateMemeScreen = () => {
     }
   };
 
-  useEffect(() => {
-    if (!image || !glContextRef.current || !imageLayout.width || !imageLayout.height) return;
-  
-    const loadImageToGL = async () => {
-      try {
-        const ctx = glContextRef.current;
-        if (!ctx) return;
-  
-        // Используем expo-asset для правильной загрузки
-        const asset = Asset.fromURI(image);
-        await asset.downloadAsync();
-  
-        if (!asset.localUri) {
-          console.error("❌ Не удалось загрузить локальный URI");
-          return;
-        }
-  
-        // Создаем изображение через React Native Image
-        Image.getSize(asset.localUri, (width, height) => {
-          ctx.clearRect(0, 0, imageLayout.width, imageLayout.height);
-          
-          // Рисуем изображение с правильными пропорциями
-          const scale = Math.min(imageLayout.width / width, imageLayout.height / height);
-          const drawWidth = width * scale;
-          const drawHeight = height * scale;
-          const x = (imageLayout.width - drawWidth) / 2;
-          const y = (imageLayout.height - drawHeight) / 2;
-          
-          ctx.drawImage(asset.localUri, x, y, drawWidth, drawHeight);
-          ctx.flush();
-          console.log("✅ Изображение загружено в GLContext");
-        });
-        
-      } catch (err) {
-        console.error("Ошибка при drawImage в GLContext:", err);
+ // 3. Исправляем useEffect для GL контекста (добавляем imageLayout.width)
+useEffect(() => {
+  if (!image || !glContextRef.current || !imageLayout.width || !imageDimensions.height) return;
+
+  const loadImageToGL = async () => {
+    try {
+      const ctx = glContextRef.current;
+      if (!ctx) return;
+
+      const asset = Asset.fromURI(image);
+      await asset.downloadAsync();
+
+      if (!asset.localUri) {
+        console.error("❌ Не удалось загрузить локальный URI");
+        return;
       }
-    };
-  
-    loadImageToGL();
-  }, [image, glContextRef.current, imageLayout.width, imageLayout.height]);
+
+      Image.getSize(asset.localUri, (width, height) => {
+        ctx.clearRect(0, 0, SCREEN_WIDTH, imageDimensions.height);
+        
+        const scale = Math.min(SCREEN_WIDTH / width, imageDimensions.height / height);
+        const drawWidth = width * scale;
+        const drawHeight = height * scale;
+        const x = (SCREEN_WIDTH - drawWidth) / 2;
+        const y = (imageDimensions.height - drawHeight) / 2;
+        
+        ctx.drawImage(asset.localUri, x, y, drawWidth, drawHeight);
+        ctx.flush();
+        console.log("✅ Изображение загружено в GLContext");
+      });
+      
+    } catch (err) {
+      console.error("Ошибка при drawImage в GLContext:", err);
+    }
+  };
+
+  loadImageToGL();
+}, [image, glContextRef.current, imageDimensions.height, imageLayout.width]);
 
   useEffect(() => {
     if (brushColor && brushColor.startsWith('#') && (brushColor.length === 7 || brushColor.length === 9)) {
@@ -432,7 +663,7 @@ const CreateMemeScreen = () => {
 
   const startPoint = useSharedValue(null);
 
-  // Жест для рисования (работает только когда включен режим рисования)
+  // Жест для рисования
   const pan = Gesture.Pan()
     .enabled(isDrawingMode && !eyedropperActive)
     .onBegin((e) => {
@@ -472,27 +703,32 @@ const CreateMemeScreen = () => {
       isDrawing.value = false;
     });
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const raw = await AsyncStorage.getItem(DRAFT_KEY);
-        if (raw) {
-          const draft = JSON.parse(raw);
-          setImage(draft.image || null);
-          setFilter(draft.filter || "none");
-          setFontSize(draft.fontSize || 28);
-          setFontColor(draft.fontColor || "#fff");
-          setFontFamily(draft.fontFamily || "Roboto");
-          setStickers(draft.stickers || []);
-          setTextBlocks(draft.textBlocks || []);
-          setHashtags(draft.hashtags || "");
-          setDrawingPaths(draft.drawingPaths || []);
+    useEffect(() => {
+      (async () => {
+        try {
+          const raw = await AsyncStorage.getItem(DRAFT_KEY);
+          if (raw) {
+            const draft = JSON.parse(raw);
+            setImage(draft.image || null);
+            setFilter(draft.filter || "none");
+            setFontSize(draft.fontSize || 28);
+            setFontColor(draft.fontColor || "#fff");
+            setFontFamily(draft.fontFamily || "Roboto");
+            setStickers(draft.stickers || []);
+            setTextBlocks(draft.textBlocks || []);
+            setHashtags(draft.hashtags || "");
+            setDrawingPaths(draft.drawingPaths || []);
+            
+            // Обновляем размеры если есть изображение
+            if (draft.image) {
+              updateImageDimensions(draft.image);
+            }
+          }
+        } catch (e) {
+          console.warn("Load draft error:", e);
         }
-      } catch (e) {
-        console.warn("Load draft error:", e);
-      }
-    })();
-  }, []);
+      })();
+    }, []);
 
   useEffect(() => {
     (async () => {
@@ -520,12 +756,17 @@ const CreateMemeScreen = () => {
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 1,
     });
-    if (!result.canceled) setImage(result.assets[0].uri);
+    if (!result.canceled) {
+      const selectedImage = result.assets[0].uri;
+      setImage(selectedImage);
+      updateImageDimensions(selectedImage);
+    }
   };
-
+  
   const pickRandomTemplate = () => {
     const random = memeTemplates[Math.floor(Math.random() * memeTemplates.length)];
     setImage(random.uri);
+    updateImageDimensions(random.uri);
   };
 
   const clearDraft = async () => {
@@ -536,6 +777,21 @@ const CreateMemeScreen = () => {
     setHashtags("");
     setFilter("none");
     setDrawingPaths([]);
+    
+    // Сбрасываем размеры к квадратным
+    setImageDimensions({ width: SCREEN_WIDTH, height: SCREEN_WIDTH });
+    
+    setIsDrawingMode(false);
+    setShowColorPicker(false);
+    setEyedropperActive(false);
+    setMagnifierVisible(false);
+    
+    setBrushType("pen");
+    setBrushColor("#ffffff");
+    setBrushSize(5);
+    isDrawing.value = false;
+    currentPathD.value = "";
+    
     Alert.alert("Черновик", "Черновик удалён");
   };
 
@@ -630,12 +886,11 @@ const CreateMemeScreen = () => {
   };
 
   const handleColorSelect = (color) => {
-    // Проверяем, что это валидный hex цвет
     if (color && color.startsWith('#') && (color.length === 7 || color.length === 9)) {
       setBrushColor(color);
     } else {
       console.warn('Invalid color selected:', color);
-      setBrushColor("#FFFFFF"); // фолбэк на белый
+      setBrushColor("#FFFFFF");
     }
   };
 
@@ -650,12 +905,10 @@ const CreateMemeScreen = () => {
 
   const renderDrawingPaths = () => {
     return drawingPaths.map((p, i) => {
-      // Проверяем валидность цвета
       const isValidColor = p.color && p.color.startsWith('#') && 
                           (p.color.length === 7 || p.color.length === 9);
       const strokeColor = isValidColor ? p.color : "#FFFFFF";
       
-      // Проверяем валидность ширины линии
       const strokeWidth = p.strokeWidth && p.strokeWidth > 0 ? p.strokeWidth : 5;
   
       if (p.type !== "arrow" || !p.start || !p.end) {
@@ -674,7 +927,6 @@ const CreateMemeScreen = () => {
         );
       }
   
-      // Обработка стрелок
       const angle = Math.atan2(p.end.y - p.start.y, p.end.x - p.start.x);
       const arrowLength = 15;
       const arrowAngle = Math.PI / 6;
@@ -707,198 +959,220 @@ const CreateMemeScreen = () => {
   };
 
   return (
-    <ScrollView
-      scrollEnabled={!eyedropperActive}
-      style={{ flex: 1, backgroundColor: isDark ? "#0F111E" : "#EAF0FF" }}
-      contentContainerStyle={styles.container}
-    >
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <BackIcon color={isDark ? "#16DBBE" : "#16A085"} />
-        </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: isDark ? "#fff" : "#000" }]}>
-          Создание мема
-        </Text>
-        <View style={{ width: 28 }} />
-      </View>
+    <View style={{ flex: 1, backgroundColor: isDark ? "#0F111E" : "#EAF0FF" }}>
+      <ScrollView
+        scrollEnabled={!eyedropperActive}
+        contentContainerStyle={styles.container}
+      >
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+            <BackIcon color={isDark ? "#16DBBE" : "#16A085"} />
+          </TouchableOpacity>
+          <Text style={[styles.headerTitle, { color: isDark ? "#fff" : "#000" }]}>
+            Создание мема
+          </Text>
+          <View style={{ width: 28 }} />
+        </View>
 
-      <View style={styles.controlsRow}>
-        <TouchableOpacity style={styles.button} onPress={pickImage}>
-          <Text style={styles.buttonText}>Выбрать</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.button} onPress={pickRandomTemplate}>
-          <Text style={styles.buttonText}>🎲 Рандом</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.button, { backgroundColor: "#FF8C69" }]}
-          onPress={clearDraft}
-        >
-          <Text style={styles.buttonText}>Очистить</Text>
-        </TouchableOpacity>
-      </View>
-
-      <Text style={[styles.subtitle, { color: isDark ? "#fff" : "#000" }]}>
-        Или выбери шаблон:
-      </Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
-        {memeTemplates.map((tpl) => (
+        <View style={styles.controlsRow}>
+          <TouchableOpacity style={styles.button} onPress={pickImage}>
+            <Text style={styles.buttonText}>Выбрать</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.button} onPress={pickRandomTemplate}>
+  <View style={styles.buttonContent}>
+    <Icon name="shuffle" size={18} color="#fff" />
+    <Text style={styles.buttonText}>Рандом</Text>
+  </View>
+</TouchableOpacity>
           <TouchableOpacity
-            key={tpl.id}
-            onPress={() => setImage(tpl.uri)}
-            style={styles.templateWrapper}
+            style={[styles.button, { backgroundColor: "#FF8C69" }]}
+            onPress={clearDraft}
           >
-            <Image source={{ uri: tpl.uri }} style={styles.template} />
+            <Text style={styles.buttonText}>Очистить</Text>
           </TouchableOpacity>
-        ))}
-      </ScrollView>
-      <GLView
-  style={{ width: 1, height: 1, opacity: 0 }}
-  onContextCreate={(gl) => {
-    const ctx = new Expo2DContext(gl);
-    glContextRef.current = ctx;
-  }}
-/>
+        </View>
 
-      <ScrollView horizontal style={{ marginBottom: 8 }}>
-        {filterOptions.map((f) => (
-          <TouchableOpacity key={f} onPress={() => setFilter(f)} style={{ marginRight: 8 }}>
-            <FilteredImage
-              uri={image || "https://via.placeholder.com/60"}
-              filter={f}
-              style={styles.filterPreview}
-            />
-            <Text style={{ color: isDark ? "#fff" : "#000", fontSize: 12, textAlign: "center" }}>
-              {f}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+        <Text style={[styles.subtitle, { color: isDark ? "#fff" : "#000" }]}>
+          Или выбери шаблон:
+        </Text>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 8 }}>
+  {memeTemplates.map((tpl) => (
+    <TouchableOpacity
+      key={tpl.id}
+      onPress={() => {
+        setImage(tpl.uri);
+        updateImageDimensions(tpl.uri);
+      }}
+      style={styles.templateWrapper}
+    >
+      <Image source={{ uri: tpl.uri }} style={styles.template} />
+    </TouchableOpacity>
+  ))}
+</ScrollView>
 
-      <ViewShot ref={viewShotRef} options={{ format: "jpg", quality: 0.9 }}>
-        <View
-          ref={imageRef}
-          style={styles.previewContainer}
-          onLayout={() => {
-            imageRef.current?.measureInWindow((x, y, width, height) => {
-              setImageLayout({ x, y, width, height });
-            });
+        <GLView
+          style={{ width: 1, height: 1, opacity: 0 }}
+          onContextCreate={(gl) => {
+            const ctx = new Expo2DContext(gl);
+            glContextRef.current = ctx;
           }}
-        >
-          {image ? (
-            <FilteredImage uri={image} filter={filter} style={styles.image} />
-          ) : (
-            <View
-              style={[
-                styles.emptyPlaceholder,
-                { backgroundColor: isDark ? "#1B2030" : "#f2f6ff" },
-              ]}
-            >
-              <Text style={{ color: isDark ? "#ccc" : "#888" }}>
-                Выберите картинку
-              </Text>
-            </View>
-          )}
+        />
 
-{magnifierVisible && image && (
-  <View
-    style={{
-      position: "absolute",
-      left: magnifierPos.x - 60,
-      top: magnifierPos.y - 60,
-      width: 120,
-      height: 120,
-    }}
-  >
-    <Magnifier
-      ref={magnifierRef}
-      imageUri={image}
-      x={Math.floor(magnifierPos.x)}
-      y={Math.floor(magnifierPos.y)}
-      size={120}
-      zoom={3}
-      onColorPicked={(color) => {
-        lastPickedColor.current = color; // сохраняем для handleTouchEnd
+        <ScrollView horizontal style={{ marginBottom: 8 }}>
+          {filterOptions.map((f) => (
+            <TouchableOpacity key={f} onPress={() => setFilter(f)} style={{ marginRight: 8 }}>
+              <FilteredImage
+                uri={image || "https://via.placeholder.com/60"}
+                filter={f}
+                style={styles.filterPreview}
+              />
+              <Text style={{ color: isDark ? "#fff" : "#000", fontSize: 12, textAlign: "center" }}>
+                {f}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+
+        {/* ОСНОВНОЙ КОНТЕЙНЕР */}
+        <View style={styles.previewWrapper}>
+  <ViewShot ref={viewShotRef} options={{ format: "jpg", quality: 0.9 }}>
+    <View
+      ref={imageRef}
+      style={[
+        styles.previewContainer,
+        { height: imageDimensions.height } // Адаптивная высота
+      ]}
+      onLayout={() => {
+        imageRef.current?.measureInWindow((x, y, width, height) => {
+          setImageLayout({ x, y, width, height: imageDimensions.height });
+        });
+      }}
+    >
+      {/* Изображение */}
+      {image ? (
+        <View style={[
+          styles.imageContainer,
+          { height: imageDimensions.height }
+        ]}>
+          <ScalableFilteredImage
+            filter={filter}
+            uri={image}
+            style={[
+              styles.image,
+              { height: imageDimensions.height }
+            ]}
+            isDrawingMode={isDrawingMode}
+          />
+        </View>
+      ) : (
+        <View
+          style={[
+            styles.emptyPlaceholder,
+            { 
+              backgroundColor: isDark ? "#1B2030" : "#f2f6ff",
+              height: imageDimensions.height
+            },
+          ]}
+        >
+          <Text style={{ color: isDark ? "#ccc" : "#888" }}>
+            Выберите картинку
+          </Text>
+        </View>
+      )}
+              {/* Текстовые блоки */}
+              {image &&
+  textBlocks.map((t) => (
+    <DraggableText
+      key={t.id}
+      id={t.id}
+      text={t.text}
+      fontSize={t.fontSize}
+      color={t.color}
+      fontFamily={t.fontFamily}
+      background={t.background}
+      backgroundColor={t.backgroundColor}
+      startX={t.x}
+      startY={t.y}
+      containerWidth={SCREEN_WIDTH}
+      containerHeight={imageDimensions.height} // Передаем адаптивную высоту
+      isDrawingMode={isDrawingMode}
+      onOpenEditor={(block) => {
+        setSelectedText({
+          ...block,
+          background: t.background,
+          backgroundColor: t.backgroundColor,
+        });
+        setIsTextModalVisible(true);
       }}
     />
-  </View>
-)}
+  ))}
 
+              {/* Лупа */}
+              {magnifierVisible && image && (
+                <View
+                  style={{
+                    position: "absolute",
+                    left: magnifierPos.x - 60,
+                    top: magnifierPos.y - 60,
+                    width: 120,
+                    height: 120,
+                    zIndex: 10,
+                  }}
+                >
+                  <Magnifier
+                    ref={magnifierRef}
+                    imageUri={image}
+                    x={Math.floor(magnifierPos.x)}
+                    y={Math.floor(magnifierPos.y)}
+                    size={120}
+                    zoom={3}
+                    onColorPicked={(color) => {
+                      lastPickedColor.current = color;
+                    }}
+                  />
+                </View>
+              )}
 
+              {/* Рисунки */}
+              <View style={StyleSheet.absoluteFill} pointerEvents="none">
+                <Svg style={StyleSheet.absoluteFill}>
+                  {renderDrawingPaths()}
+                  {isDrawingMode && (
+                    <AnimatedPath
+                      animatedProps={animatedPathProps}
+                      strokeWidth={brushSize}
+                      fill="none"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeOpacity={brushType === "marker" ? 0.6 : 1}
+                      strokeDasharray={
+                        brushType === "marker"
+                          ? "5,3"
+                          : brushType === "arrow"
+                          ? "10,5"
+                          : null
+                      }
+                      stroke={brushColor && brushColor.startsWith('#') && 
+                             (brushColor.length === 7 || brushColor.length === 9) 
+                             ? brushColor 
+                             : "#FFFFFF"}
+                    />
+                  )}
+                </Svg>
+              </View>
 
+              {/* Стикеры */}
+              {image &&
+                stickers.map((s) => (
+                  <Sticker key={s.id} emoji={s.emoji} initialX={80} initialY={80} />
+                ))}
+            </View>
+          </ViewShot>
 
-{eyedropperActive && (
-  <View style={{ position: 'absolute', top: 100, left: 10, backgroundColor: 'rgba(0,0,0,0.7)', padding: 10, zIndex: 1000 }}>
-    <Text style={{ color: '#fff', fontSize: 12 }}>
-      Отладка:{'\n'}
-      Координаты: {Math.round(magnifierPos.x)}, {Math.round(magnifierPos.y)}{'\n'}
-      Размер изображения: {imageLayout.width}x{imageLayout.height}
-    </Text>
-  </View>
-)}
-
-          {/* Рисунки и линии */}
-          <View style={StyleSheet.absoluteFill} pointerEvents="none">
-            <Svg style={StyleSheet.absoluteFill}>
-              {renderDrawingPaths()}
-              {isDrawingMode && (
-  <AnimatedPath
-    animatedProps={animatedPathProps}
-    strokeWidth={brushSize}
-    fill="none"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    strokeOpacity={brushType === "marker" ? 0.6 : 1}
-    strokeDasharray={
-      brushType === "marker"
-        ? "5,3"
-        : brushType === "arrow"
-        ? "10,5"
-        : null
-    }
-    stroke={brushColor && brushColor.startsWith('#') && 
-           (brushColor.length === 7 || brushColor.length === 9) 
-           ? brushColor 
-           : "#FFFFFF"}
-  />
-)}
-            </Svg>
-          </View>
-
-          {/* Текстовые блоки */}
-          {image &&
-            textBlocks.map((t) => (
-              <DraggableText
-                key={t.id}
-                id={t.id}
-                text={t.text}
-                fontSize={t.fontSize}
-                color={t.color}
-                fontFamily={t.fontFamily}
-                background={t.background}
-                backgroundColor={t.backgroundColor}
-                startX={t.x}
-                startY={t.y}
-                onOpenEditor={(block) => {
-                  setSelectedText({
-                    ...block,
-                    background: t.background,
-                    backgroundColor: t.backgroundColor,
-                  });
-                  setIsTextModalVisible(true);
-                }}
-              />
-            ))}
-
-          {/* Стикеры */}
-          {image &&
-            stickers.map((s) => (
-              <Sticker key={s.id} emoji={s.emoji} initialX={80} initialY={80} />
-            ))}
-
-          {/* Инструменты рисования */}
+          {/* ИНСТРУМЕНТЫ РИСОВАНИЯ - ОТДЕЛЬНО ОТ ViewShot */}
           {isDrawingMode && (
-            <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-              {/* Верхняя панель */}
+            <>
+              {/* Панель инструментов */}
               <View style={styles.topToolbar}>
                 <TouchableOpacity onPress={handleUndo}>
                   <Icon name="undo" size={28} color="#fff" />
@@ -912,10 +1186,13 @@ const CreateMemeScreen = () => {
                 <TouchableOpacity onPress={handleColorPicker}>
                   <Icon name="color-lens" size={28} color="#fff" />
                 </TouchableOpacity>
+                <TouchableOpacity onPress={() => setIsDrawingMode(false)}>
+                  <Icon name="close" size={26} color="#E0E0E0" />
+                </TouchableOpacity>
               </View>
 
               {/* Ползунок кисти */}
-              {!isDrawing.value && (
+              {!isDrawing.value && !eyedropperActive && (
                 <View style={styles.brushSliderContainer}>
                   <View
                     ref={sliderTrackRef}
@@ -945,7 +1222,7 @@ const CreateMemeScreen = () => {
               )}
 
               {/* Цветовая палитра */}
-              {showColorPicker && !isDrawing.value && (
+              {showColorPicker && !isDrawing.value && !eyedropperActive && (
                 <View style={styles.bottomPalette}>
                   <ScrollView
                     horizontal
@@ -990,11 +1267,17 @@ const CreateMemeScreen = () => {
                 </View>
               )}
 
-              {/* область пипетки */}
+              {/* Область для рисования - ТОЛЬКО ДЛЯ ЖЕСТОВ */}
+              {isDrawingMode && !eyedropperActive && (
+                <GestureDetector gesture={pan}>
+                  <View style={styles.drawingArea} />
+                </GestureDetector>
+              )}
+
+              {/* Область для пипетки */}
               {eyedropperActive && (
                 <View
-                  style={StyleSheet.absoluteFill}
-                  pointerEvents="auto"
+                  style={styles.drawingArea}
                   onStartShouldSetResponder={() => true}
                   onMoveShouldSetResponder={() => true}
                   onResponderGrant={handleTouchMove}
@@ -1002,101 +1285,128 @@ const CreateMemeScreen = () => {
                   onResponderRelease={handleTouchEnd}
                 />
               )}
-
-              {/* Область для жестов рисования */}
-              {isDrawingMode && !eyedropperActive ? (
-                <GestureDetector gesture={pan}>
-                  <View style={StyleSheet.absoluteFill} />
-                </GestureDetector>
-              ) : null}
-            </View>
+            </>
           )}
         </View>
-      </ViewShot>
 
-      <TextEditModal
-        visible={isTextModalVisible}
-        textBlock={selectedText}
-        onClose={() => {
-          setIsTextModalVisible(false);
-          setSelectedText(null);
-        }}
-        onChange={(updatedText) => {
-          setTextBlocks((prev) =>
-            prev.map((t) =>
-              t.id === updatedText.id ? {
-                ...t,
-                text: updatedText.text,
-                fontSize: updatedText.fontSize,
-                color: updatedText.color,
-                fontFamily: updatedText.fontFamily,
-                background: updatedText.background,
-                backgroundColor: updatedText.backgroundColor,
-                x: updatedText.x || t.x,
-                y: updatedText.y || t.y,
-              } : t
-            )
-          );
-          setIsTextModalVisible(false);
-          setSelectedText(null);
-        }}
-      />
-
-      <View style={styles.bottomMenu}>
-        <TouchableOpacity 
-          style={[styles.menuButton, (!image || isDrawingMode) && styles.disabledButton]} 
-          onPress={addTextBlock}
-          disabled={!image || isDrawingMode}
-        >
-          <Text style={[styles.menuText, (!image || isDrawingMode) && styles.disabledText]}>
-            ✍️ Текст
-          </Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={[styles.menuButton, !image && styles.disabledButton]} 
-          onPress={() => {
-            if (eyedropperActive) {
-              setEyedropperActive(false);
-              setMagnifierVisible(false);
-            }
-            setIsDrawingMode((prev) => !prev);
-            setShowColorPicker(false);
+        <TextEditModal
+          visible={isTextModalVisible}
+          textBlock={selectedText}
+          onClose={() => {
+            setIsTextModalVisible(false);
+            setSelectedText(null);
           }}
-          disabled={!image}
-        >
-          <Text style={[styles.menuText, !image && styles.disabledText]}>
-            {isDrawingMode ? "✖️ Закончить рисование" : "🎨 Рисовать"}
-          </Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={[styles.menuButton, (!image || isDrawingMode) && styles.disabledButton]} 
-          onPress={() => Alert.alert("Стикеры", "Добавление стикеров")}
-          disabled={!image || isDrawingMode}
-        >
-          <Text style={[styles.menuText, (!image || isDrawingMode) && styles.disabledText]}>
-            🎭 Стикеры
-          </Text>
-        </TouchableOpacity>
-      </View>
+          onChange={(updatedText) => {
+            setTextBlocks((prev) =>
+              prev.map((t) =>
+                t.id === updatedText.id ? {
+                  ...t,
+                  text: updatedText.text,
+                  fontSize: updatedText.fontSize,
+                  color: updatedText.color,
+                  fontFamily: updatedText.fontFamily,
+                  background: updatedText.background,
+                  backgroundColor: updatedText.backgroundColor,
+                  x: updatedText.x || t.x,
+                  y: updatedText.y || t.y,
+                } : t
+              )
+            );
+            setIsTextModalVisible(false);
+            setSelectedText(null);
+          }}
+        />
 
-      <TouchableOpacity
-        style={[styles.button, (!image || isLoading) && styles.buttonDisabled]}
-        onPress={saveMeme}
-        disabled={!image || isLoading}
-      >
-        <Text style={styles.buttonText}>
-          {isLoading ? "⏳ Сохранение..." : "💾 Сохранить мем"}
-        </Text>
-      </TouchableOpacity>
+        {/* Нижнее меню */}
+        <View style={styles.bottomMenu}>
+  <TouchableOpacity 
+    style={[styles.menuButton, (!image) && styles.disabledButton]} 
+    onPress={addTextBlock}
+    disabled={!image}
+  >
+    <View style={styles.menuItem}>
+      <Icon name="text-fields" size={16} color={!image ? "#888" : "#fff"} />
+      <Text style={[styles.menuText, (!image) && styles.disabledText]}>Текст</Text>
+    </View>
+  </TouchableOpacity>
+  
+  <TouchableOpacity 
+    style={[styles.menuButton, !image && styles.disabledButton]} 
+    onPress={() => {
+      if (image) {
+        setIsDrawingMode(true);
+        setShowColorPicker(false);
+      }
+    }}
+    disabled={!image}
+  >
+    <View style={styles.menuItem}>
+      <Icon name="brush" size={16} color={!image ? "#888" : "#fff"} />
+      <Text style={[styles.menuText, !image && styles.disabledText]}>Рисовать</Text>
+    </View>
+  </TouchableOpacity>
+  
+  <TouchableOpacity 
+    style={[styles.menuButton, (!image) && styles.disabledButton]} 
+    onPress={() => Alert.alert("Стикеры", "Добавление стикеров")}
+    disabled={!image}
+  >
+    <View style={styles.menuItem}>
+      <Icon name="emoji-emotions" size={16} color={!image ? "#888" : "#fff"} />
+      <Text style={[styles.menuText, (!image) && styles.disabledText]}>Стикеры</Text>
+    </View>
+  </TouchableOpacity>
+</View>
 
-      <View style={{ height: 50 }} />
-    </ScrollView>
+<TouchableOpacity
+  style={[styles.button, (!image || isLoading) && styles.buttonDisabled]}
+  onPress={saveMeme}
+  disabled={!image || isLoading}
+>
+  <View style={styles.buttonContent}>
+    <Icon name="cloud-upload" size={18} color="#fff" />
+    <Text style={styles.buttonText}>
+      {isLoading ? "Сохранение..." : "Выложить"}
+    </Text>
+  </View>
+</TouchableOpacity>
+
+
+        <View style={{ height: 50 }} />
+      </ScrollView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
+  drawingArea: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'transparent',
+    zIndex: 5,
+  },
+  previewWrapper: {
+    position: 'relative',
+    width: SCREEN_WIDTH,
+  },
+  previewContainer: {
+    width: SCREEN_WIDTH,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  imageContainer: {
+    width: SCREEN_WIDTH,
+    overflow: 'hidden',
+  },
+  image: { 
+    width: "100%", 
+    height: "100%" 
+  },
+  emptyPlaceholder: {
+    width: SCREEN_WIDTH,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   bottomMenu: {
     flexDirection: "row",
     marginBottom: 13,
@@ -1122,6 +1432,32 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 5,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  menuText: {
+    color: "#fff", 
+    fontWeight: "700",
+    marginLeft: 6,
+    fontSize: 14,
+  },
+  buttonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  buttonText: {
+    color: "#fff", 
+    fontWeight: "700",
+    marginLeft: 6,
+  },
+  menuButton: { 
+    padding: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   colorBox: {
     width: 32,
@@ -1177,10 +1513,8 @@ const styles = StyleSheet.create({
     padding: 8,
     borderRadius: 12,
     marginHorizontal: 20,
-    zIndex: 10,
+    zIndex: 20, // ВЫШЕ области рисования
   },
-  menuButton: { padding: 8 },
-  menuText: { color: "#fff", fontWeight: "700" },
   container: { alignItems: "center", padding: 16, paddingTop: 20 },
   header: { width: "100%", flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginBottom: 20 },
   backBtn: { padding: 6 },
@@ -1188,31 +1522,9 @@ const styles = StyleSheet.create({
   controlsRow: { width: "100%", flexDirection: "row", justifyContent: "space-between", marginBottom: 8 },
   button: { backgroundColor: "#16DBBE", padding: 10, borderRadius: 10, marginBottom: 8, minWidth: 96, alignItems: "center", marginHorizontal: 4 },
   buttonDisabled: { backgroundColor: "#888", opacity: 0.7 },
-  buttonText: { color: "#fff", fontWeight: "700" },
   subtitle: { fontSize: 15, marginBottom: 9, alignSelf: "flex-start" },
   templateWrapper: { marginRight: 10, borderRadius: 8, marginBottom: 9, overflow: "hidden" },
   template: { width: 100, height: 100 },
-  previewContainer: {
-    width: SCREEN_WIDTH,
-    height: SCREEN_WIDTH,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  preview: {
-    width: SCREEN_WIDTH,
-    height: SCREEN_WIDTH,
-    borderRadius: 12,
-    overflow: "hidden",
-    backgroundColor: "#000",
-    position: "relative",
-  },
-  emptyPlaceholder: {
-    width: SCREEN_WIDTH,
-    height: SCREEN_WIDTH,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  image: { width: "100%", height: "100%" },
   filterPreview: { width: 60, height: 60, borderRadius: 8, overflow: "hidden" },
 });
 

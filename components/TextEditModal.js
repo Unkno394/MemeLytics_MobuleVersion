@@ -68,7 +68,11 @@ const TextEditModal = ({ visible, textBlock, onClose, onChange }) => {
   }, []);
 
   const handleClose = () => {
-    onSave?.({
+    if (!localText.trim()) {
+      onClose?.();
+      return;
+    }
+    onChange?.({
       ...textBlock,
       text: localText,
       fontSize: localFontSize,
