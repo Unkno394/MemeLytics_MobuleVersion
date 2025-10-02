@@ -45,7 +45,7 @@ import { GLView } from "expo-gl";
 import Expo2DContext from "expo-2d-context";
 import { Asset } from "expo-asset";
 import CustomAlert from '../../components/CustomAlert';
-
+import { router } from 'expo-router';
 
 
 LogBox.ignoreLogs([
@@ -486,10 +486,16 @@ const showError = (message) => {
 };
 const showSuccess = (message, onOk) => {
   showAlert('Успех', message, [
-    { text: 'OK', onPress: () => {
-      setAlertVisible(false);
-      onOk?.();
-    }}
+    { 
+      text: 'OK', 
+      onPress: () => {
+        setAlertVisible(false);
+        // Добавляем задержку для стабильности
+        setTimeout(() => {
+          onOk?.();
+        }, 100);
+      }
+    }
   ]);
 };
 
@@ -862,27 +868,34 @@ useEffect(() => {
   };
 
   const saveMeme = async () => {
-    if (!image) return showError("Выберите изображение для мема");
-    
-    setIsLoading(true);
-    try {
-      const { status } = await MediaLibrary.requestPermissionsAsync();
-      if (status !== "granted") return showError("Нет доступа к галерее");
-      
-      const uri = await viewShotRef.current.capture();
-      await MediaLibrary.saveToLibraryAsync(uri);
-      await AsyncStorage.removeItem(DRAFT_KEY);
-      showSuccess("Мем сохранён!", () => {
-        navigation.goBack();
-      });
-      
-    } catch (err) {
-      console.error(err);
-      showError("Не удалось сохранить мем.");
-    } finally {
+  if (!image) return showError("Выберите изображение для мема");
+  
+  setIsLoading(true);
+  try {
+    const { status } = await MediaLibrary.requestPermissionsAsync();
+    if (status !== "granted") {
       setIsLoading(false);
+      return showError("Нет доступа к галерее");
     }
-  };
+    
+    const uri = await viewShotRef.current.capture();
+    await MediaLibrary.saveToLibraryAsync(uri);
+    await AsyncStorage.removeItem(DRAFT_KEY);
+    
+    setIsLoading(false);
+    
+    // Переходим на главный экран с параметром
+    router.push({
+      pathname: '/(tabs)',
+      params: { showSuccessAlert: 'true' }
+    });
+    
+  } catch (err) {
+    console.error(err);
+    setIsLoading(false);
+    showError("Не удалось сохранить мем.");
+  }
+};
 
   const filterOptions = [
     "none",

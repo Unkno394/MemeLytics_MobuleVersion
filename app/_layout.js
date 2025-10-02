@@ -6,6 +6,7 @@ import * as SplashScreen from "expo-splash-screen";
 import * as Font from "expo-font";
 import { ThemeProvider } from "../src/context/ThemeContext";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
+import CustomAlert from '../components/CustomAlert';
 
 SplashScreen.preventAutoHideAsync();
 
