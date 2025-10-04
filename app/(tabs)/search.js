@@ -10,41 +10,65 @@ import {
   Image,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import Svg, { Path } from "react-native-svg";
+import Svg, { Path, Defs, LinearGradient as SvgLinearGradient, Stop } from "react-native-svg";
 import { ThemeContext } from "../../src/context/ThemeContext";
 import { router } from 'expo-router';
 
 const { width } = Dimensions.get("window");
 const STEP = 70;
+const NAVIGATION_DELAY = 80;
 
 // --- SVG Icons ---
 const HomeIcon = ({ color = "#000" }) => (
-  <Svg width={24} height={24} viewBox="0 0 24 24" fill={color}>
-    <Path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" />
+  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+    <Path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" fill={color} />
   </Svg>
 );
 
 const SearchIcon = ({ color = "#000" }) => (
-  <Svg width={24} height={24} viewBox="0 0 24 24" fill={color}>
-    <Path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zM9.5 14C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
+  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+    <Path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zM9.5 14C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" fill={color} />
   </Svg>
 );
 
-const CubeIcon = ({ color = "#000" }) => (
-  <Svg width={24} height={24} viewBox="0 0 24 24" fill={color}>
-    <Path d="M11 11H6v2h5v5h2v-5h5v-2h-5V6h-2zM5 1a4 4 0 0 0-4 4v14a4 4 0 0 0 4 4h14a4 4 0 0 0 4-4V5a4 4 0 0 0-4-4zm16 4v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5c0-1.1.9-2 2-2h14a2 2 0 0 1 2 2" />
-  </Svg>
-);
+// CubeIcon с градиентной заливкой для неактивного состояния
+const CubeIcon = ({ active = false }) => {
+  if (active) {
+    return (
+      <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+        <Path
+          d="M11 11H6v2h5v5h2v-5h5v-2h-5V6h-2zM5 1a4 4 0 0 0-4 4v14a4 4 0 0 0 4 4h14a4 4 0 0 0 4-4V5a4 4 0 0 0-4-4zm16 4v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5c0-1.1.9-2 2-2h14a2 2 0 0 1 2 2"
+          fill="#000"
+        />
+      </Svg>
+    );
+  }
+
+  return (
+    <Svg width={24} height={24} viewBox="0 0 24 24">
+      <Defs>
+        <SvgLinearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0%" stopColor="#16DBBE" />
+          <Stop offset="100%" stopColor="#9B8CFF" />
+        </SvgLinearGradient>
+      </Defs>
+      <Path
+        d="M11 11H6v2h5v5h2v-5h5v-2h-5V6h-2zM5 1a4 4 0 0 0-4 4v14a4 4 0 0 0 4 4h14a4 4 0 0 0 4-4V5a4 4 0 0 0-4-4zm16 4v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5c0-1.1.9-2 2-2h14a2 2 0 0 1 2 2"
+        fill="url(#grad)"
+      />
+    </Svg>
+  );
+};
 
 const MessageIcon = ({ color = "#000" }) => (
-  <Svg width={24} height={24} viewBox="0 0 24 24" fill={color}>
-    <Path d="M20 2H4c-1.1 0-2 .9-2 2v20l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z" />
+  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+    <Path d="M20 2H4c-1.1 0-2 .9-2 2v20l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z" fill={color} />
   </Svg>
 );
 
 const AccountIcon = ({ color = "#000" }) => (
-  <Svg width={24} height={24} viewBox="0 0 24 24" fill={color}>
-    <Path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+    <Path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" fill={color} />
   </Svg>
 );
 
@@ -92,6 +116,8 @@ const SearchScreen = () => {
   const textOpacities = useRef(tabs.map((t) => new Animated.Value(t.id === activeTab ? 1 : 0))).current;
   const textTranslates = useRef(tabs.map((t) => new Animated.Value(t.id === activeTab ? 10 : 20))).current;
 
+  const navTimeoutRef = useRef(null);
+
   // Анимация как в index.js
   useEffect(() => {
     const index = tabs.findIndex((tab) => tab.id === activeTab);
@@ -114,6 +140,41 @@ const SearchScreen = () => {
     });
   }, [activeTab]);
 
+  const navigateTo = (tabId) => {
+    if (navTimeoutRef.current) {
+      clearTimeout(navTimeoutRef.current);
+      navTimeoutRef.current = null;
+    }
+
+    const navigate = () => {
+      switch (tabId) {
+        case "home":
+          router.push("/");
+          break;
+        case "search":
+          router.push("/search");
+          break;
+        case "random":
+          router.push("/create");
+          break;
+        case "messenger":
+          router.push("/messenger");
+          break;
+        case "profile":
+          router.push("/profile");
+          break;
+      }
+    };
+
+    if (NAVIGATION_DELAY > 0) {
+      navTimeoutRef.current = setTimeout(navigate, NAVIGATION_DELAY);
+    } else {
+      navigate();
+    }
+  };
+
+  useEffect(() => () => navTimeoutRef.current && clearTimeout(navTimeoutRef.current), []);
+
   // opacity активной иконки как в index.js
   const iconActiveOpacity = (index) =>
     translateX.interpolate({
@@ -124,23 +185,7 @@ const SearchScreen = () => {
 
   const handleTabPress = (tabId) => {
     setActiveTab(tabId);
-    switch (tabId) {
-      case 'home':
-        router.push('/');
-        break;
-      case 'search':
-        router.push('/search');
-        break;
-      case 'random':
-        router.push('/create');
-        break;
-      case 'messenger':
-        router.push('/messenger');
-        break;
-      case 'profile':
-        router.push('/profile');
-        break;
-    }
+    navigateTo(tabId);
   };
 
   // Стили
@@ -259,16 +304,24 @@ const SearchScreen = () => {
         {columns.map((column, columnIndex) => (
           <View key={columnIndex} style={styles.column}>
             {column.map((meme) => (
-              <TouchableOpacity
-                key={meme.id}
-                style={[styles.memeItem, { width: columnWidth }]}
-              >
-                <Image
-                  source={{ uri: meme.uri }}
-                  style={[styles.memeImage, { height: meme.height }]}
-                  resizeMode="cover"
-                />
-              </TouchableOpacity>
+<TouchableOpacity 
+  key={meme.id} 
+  style={[styles.memeItem, { width: columnWidth }]}
+  onPress={() => router.push({
+    pathname: '/post-detail',
+    params: {
+      postId: meme.id,
+      imageUri: meme.uri,
+      postType: 'otherPost'
+    }
+  })}
+>
+  <Image
+    source={{ uri: meme.uri }}
+    style={[styles.memeImage, { height: meme.height }]}
+    resizeMode="cover"
+  />
+</TouchableOpacity>
             ))}
           </View>
         ))}
@@ -304,49 +357,32 @@ const SearchScreen = () => {
         <View style={styles.navigation}>
           <LinearGradient colors={theme.navBackground} start={{ x: 1, y: 0 }} end={{ x: 0, y: 0 }} style={styles.navigationGradient}>
             {tabs.map((tab, index) => {
+              const isRandom = tab.id === "random";
               const IconComponent = tab.icon;
+
               const activeOpacity = iconActiveOpacity(index);
 
               return (
                 <TouchableOpacity key={tab.id} style={styles.navItem} onPress={() => handleTabPress(tab.id)} activeOpacity={0.8}>
                   <View style={styles.navLink}>
-                    <Animated.View style={[styles.iconWrapper, { transform: [{ translateY: iconTranslates[index] }] }]}> 
-                      {/* inactive */}
-                      <IconComponent color={theme.inactiveIcon} />
-
-                      {/* active overlay */}
-                      <Animated.View
-                        pointerEvents="none"
-                        style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, justifyContent: "center", alignItems: "center", opacity: activeOpacity }}
-                      >
-                        <IconComponent color={theme.activeIcon} />
-                      </Animated.View>
+                    <Animated.View style={[styles.iconWrapper, { transform: [{ translateY: iconTranslates[index] }] }]}>
+                      {isRandom ? <CubeIcon active={tab.id === activeTab} /> : <IconComponent color={theme.inactiveIcon} />}
+                      {!isRandom && (
+                        <Animated.View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, justifyContent: "center", alignItems: "center", opacity: activeOpacity }}>
+                          <IconComponent color={theme.activeIcon} />
+                        </Animated.View>
+                      )}
                     </Animated.View>
 
-                    <Animated.Text style={[styles.navText, { opacity: textOpacities[index], transform: [{ translateY: textTranslates[index] }], color: isDark ? "#FFFFFF" : "#1B1F33" }]}> 
+                    <Animated.Text style={[styles.navText, { opacity: textOpacities[index], transform: [{ translateY: textTranslates[index] }], color: isDark ? "#FFFFFF" : "#1B1F33" }]}>
                       {tab.label}
                     </Animated.Text>
 
-                    {/* Градиентный кружок как в index.js */}
-                    <Animated.View
-                      pointerEvents="none"
-                      style={[
-                        styles.circleWrapper,
-                        { transform: [{ scale: circleScales[index] }], opacity: circleScales[index] },
-                      ]}
-                    >
-                      <LinearGradient
-                        colors={theme.indicatorGradient}
-                        start={{ x: 0.1, y: 0 }}
-                        end={{ x: 0.9, y: 1 }}
-                        style={styles.circleGradient}
-                      />
-
-                      {/* ЧЁРНАЯ иконка поверх градиента */}
+                    <Animated.View pointerEvents="none" style={[styles.circleWrapper, { transform: [{ scale: circleScales[index] }], opacity: circleScales[index] }]}>
+                      <LinearGradient colors={theme.indicatorGradient} start={{ x: 0.1, y: 0 }} end={{ x: 0.9, y: 1 }} style={styles.circleGradient} />
                       <Animated.View pointerEvents="none" style={{ position: "absolute", justifyContent: "center", alignItems: "center", opacity: circleScales[index] }}>
-                        <IconComponent color={"#000"} />
+                        {tab.id === "random" ? <CubeIcon active={true} /> : <IconComponent color={"#000"} />}
                       </Animated.View>
-
                       <View style={[styles.circleBorder, { borderColor: isDark ? "#0F111E" : "#FFFFFF" }]} pointerEvents="none" />
                     </Animated.View>
                   </View>
@@ -355,8 +391,7 @@ const SearchScreen = () => {
             })}
           </LinearGradient>
 
-          {/* Перемещающийся индикатор/обводка */}
-          <Animated.View style={[styles.indicator, { transform: [{ translateX: translateX }] }]}> 
+          <Animated.View style={[styles.indicator, { transform: [{ translateX: translateX }] }]}>
             <LinearGradient colors={theme.indicatorGradient} start={{ x: 0.5, y: 0 }} end={{ x: 0.4, y: 1.5 }} style={styles.indicatorGradient} />
           </Animated.View>
         </View>

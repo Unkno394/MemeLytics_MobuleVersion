@@ -1,0 +1,723 @@
+import React, { useState, useRef, useEffect, useContext } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Dimensions,
+  Animated,
+  ScrollView,
+  Image,
+} from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
+import Svg, { Path, Defs, LinearGradient as SvgLinearGradient, Stop } from "react-native-svg";
+import { ThemeContext } from "../../../src/context/ThemeContext";
+import { router } from "expo-router";
+import CustomAlert from "../../../components/CustomAlert";
+
+const { width, height } = Dimensions.get("window");
+const STEP = 70;
+const NAVIGATION_DELAY = 80;
+
+// ------------------- ICONS -------------------
+const HomeIcon = ({ color = "#000" }) => (
+  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+    <Path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" fill={color} />
+  </Svg>
+);
+
+const SearchIcon = ({ color = "#000" }) => (
+  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zM9.5 14C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"
+      fill={color}
+    />
+  </Svg>
+);
+
+// CubeIcon с градиентной заливкой для неактивного состояния
+const CubeIcon = ({ active = false }) => {
+  if (active) {
+    return (
+      <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+        <Path
+          d="M11 11H6v2h5v5h2v-5h5v-2h-5V6h-2zM5 1a4 4 0 0 0-4 4v14a4 4 0 0 0 4 4h14a4 4 0 0 0 4-4V5a4 4 0 0 0-4-4zm16 4v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5c0-1.1.9-2 2-2h14a2 2 0 0 1 2 2"
+          fill="#000"
+        />
+      </Svg>
+    );
+  }
+
+  return (
+    <Svg width={24} height={24} viewBox="0 0 24 24">
+      <Defs>
+        <SvgLinearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0%" stopColor="#16DBBE" />
+          <Stop offset="100%" stopColor="#9B8CFF" />
+        </SvgLinearGradient>
+      </Defs>
+      <Path
+        d="M11 11H6v2h5v5h2v-5h5v-2h-5V6h-2zM5 1a4 4 0 0 0-4 4v14a4 4 0 0 0 4 4h14a4 4 0 0 0 4-4V5a4 4 0 0 0-4-4zm16 4v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5c0-1.1.9-2 2-2h14a2 2 0 0 1 2 2"
+        fill="url(#grad)"
+      />
+    </Svg>
+  );
+};
+
+const MessageIcon = ({ color = "#000" }) => (
+  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M20 2H4c-1.1 0-2 .9-2 2v20l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"
+      fill={color}
+    />
+  </Svg>
+);
+
+const AccountIcon = ({ color = "#000" }) => (
+  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"
+      fill={color}
+    />
+  </Svg>
+);
+
+const BackIcon = ({ color = "#16DBBE" }) => (
+  <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M15 18l-6-6 6-6"
+      stroke={color}
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </Svg>
+);
+
+const HeartIcon = ({ color = "#FF4081", size = 20 }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"
+      fill={color}
+    />
+  </Svg>
+);
+
+// Новая иконка комментария - более понятная
+const CommentIcon = ({ color = "#4FC3F7", size = 20 }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2v10z"
+      stroke={color}
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+    <Path
+      d="M9 10h6M9 14h4"
+      stroke={color}
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
+  </Svg>
+);
+
+const ShareIcon = ({ color = "#7C4DFF", size = 20 }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92 1.61 0 2.92-1.31 2.92-2.92s-1.31-2.92-2.92-2.92z"
+      fill={color}
+    />
+  </Svg>
+);
+
+// ------------------- NotificationsScreen -------------------
+const NotificationsScreen = () => {
+  const { isDark } = useContext(ThemeContext);
+
+  const tabs = [
+    { id: "home", icon: HomeIcon, label: "Home" },
+    { id: "search", icon: SearchIcon, label: "Search" },
+    { id: "random", icon: CubeIcon, label: "Create" },
+    { id: "messenger", icon: MessageIcon, label: "Messenger" },
+    { id: "profile", icon: AccountIcon, label: "Profile" },
+  ];
+
+  const theme = isDark
+    ? {
+        background: "#0F111E",
+        navBackground: ["#1A1B30", "#2A2B42"],
+        indicatorGradient: ["#00DEE8", "#77EE5F"],
+        activeIcon: "#FFFFFF",
+        inactiveIcon: "#1FD3B9",
+        cardBg: "#1A1B30",
+        textColor: "#FFFFFF",
+        secondaryText: "#A0A3BD",
+        headerBg: "#1A1B30",
+        borderColor: "#2A2B42",
+        timeColor: "#6B7280",
+      }
+    : {
+        background: "#EAF0FF",
+        navBackground: ["#FFFFFF", "#F8FAFF"],
+        indicatorGradient: ["#00BFA6", "#5CE1E6"],
+        activeIcon: "#1FD3B9",
+        inactiveIcon: "#7C8599",
+        cardBg: "#FFFFFF",
+        textColor: "#1B1F33",
+        secondaryText: "#6B7280",
+        headerBg: "#FFFFFF",
+        borderColor: "#E5E7EB",
+        timeColor: "#9CA3AF",
+      };
+
+  const initialActive = "messenger";
+  const [activeTab, setActiveTab] = useState(initialActive);
+
+  // Исправленные анимационные refs
+  const translateX = useRef(new Animated.Value(tabs.findIndex((t) => t.id === initialActive) * STEP)).current;
+  const circleScales = useRef(tabs.map((t) => new Animated.Value(t.id === initialActive ? 1 : 0))).current;
+  const iconTranslates = useRef(tabs.map((t) => new Animated.Value(t.id === initialActive ? -32 : 0))).current;
+  const textOpacities = useRef(tabs.map((t) => new Animated.Value(t.id === initialActive ? 1 : 0))).current;
+  const textTranslates = useRef(tabs.map((t) => new Animated.Value(t.id === initialActive ? 10 : 20))).current;
+
+  const navTimeoutRef = useRef(null);
+  const scrollViewRef = useRef(null);
+
+  useEffect(() => {
+    const index = tabs.findIndex((tab) => tab.id === activeTab);
+
+    // Улучшенная анимация ползунка
+    Animated.spring(translateX, {
+      toValue: index * STEP,
+      useNativeDriver: true,
+      friction: 7,
+      tension: 50,
+    }).start();
+
+    tabs.forEach((tab, i) => {
+      const isActive = tab.id === activeTab;
+      Animated.spring(circleScales[i], { 
+        toValue: isActive ? 1 : 0, 
+        useNativeDriver: true,
+        friction: 7,
+      }).start();
+      Animated.spring(iconTranslates[i], { 
+        toValue: isActive ? -32 : 0, 
+        useNativeDriver: true,
+        friction: 7,
+      }).start();
+      Animated.parallel([
+        Animated.timing(textOpacities[i], { 
+          toValue: isActive ? 1 : 0, 
+          duration: 200, 
+          useNativeDriver: true 
+        }),
+        Animated.spring(textTranslates[i], { 
+          toValue: isActive ? 10 : 20, 
+          useNativeDriver: true,
+          friction: 7,
+        }),
+      ]).start();
+    });
+  }, [activeTab]);
+
+  const navigateTo = (tabId) => {
+    if (navTimeoutRef.current) {
+      clearTimeout(navTimeoutRef.current);
+      navTimeoutRef.current = null;
+    }
+
+    const navigate = () => {
+      switch (tabId) {
+        case "home":
+          router.push("/index");
+          break;
+        case "search":
+          router.push("/search");
+          break;
+        case "random":
+          router.push("/create");
+          break;
+        case "messenger":
+          router.push("/messenger");
+          break;
+        case "profile":
+          router.push("/profile");
+          break;
+      }
+    };
+
+    if (NAVIGATION_DELAY > 0) {
+      navTimeoutRef.current = setTimeout(navigate, NAVIGATION_DELAY);
+    } else {
+      navigate();
+    }
+  };
+
+  useEffect(() => () => navTimeoutRef.current && clearTimeout(navTimeoutRef.current), []);
+
+  const handleTabPress = (tabId) => {
+    setActiveTab(tabId);
+    navigateTo(tabId);
+  };
+
+  // Улучшенная opacity для активной иконки
+  const iconActiveOpacity = (index) =>
+    translateX.interpolate({
+      inputRange: [
+        (index - 0.5) * STEP, 
+        (index - 0.2) * STEP, 
+        index * STEP, 
+        (index + 0.2) * STEP, 
+        (index + 0.5) * STEP
+      ],
+      outputRange: [0, 0.3, 1, 0.3, 0],
+      extrapolate: "clamp",
+    });
+
+  const notifications = [
+    {
+      id: "1",
+      type: "like",
+      user: "Аня",
+      avatar: "https://i.pravatar.cc/150?img=1",
+      content: "лайкнул(а) вашу публикацию",
+      time: "5 мин назад",
+      postPreview: "https://i.pravatar.cc/150?img=11",
+      read: false,
+    },
+    {
+      id: "2",
+      type: "comment",
+      user: "Максим",
+      avatar: "https://i.pravatar.cc/150?img=2",
+      content: "прокомментировал(а): 'Крутое фото! Где это?'",
+      time: "1 час назад",
+      postPreview: "https://i.pravatar.cc/150?img=12",
+      read: false,
+    },
+    {
+      id: "3",
+      type: "share",
+      user: "Ира",
+      avatar: "https://i.pravatar.cc/150?img=3",
+      content: "поделился(ась) вашей публикацией",
+      time: "2 часа назад",
+      postPreview: "https://i.pravatar.cc/150?img=13",
+      read: true,
+    },
+    {
+      id: "4",
+      type: "like",
+      user: "Влад",
+      avatar: "https://i.pravatar.cc/150?img=4",
+      content: "лайкнул(а) вашу публикацию",
+      time: "3 часа назад",
+      postPreview: "https://i.pravatar.cc/150?img=14",
+      read: true,
+    },
+    {
+      id: "5",
+      type: "comment",
+      user: "Света",
+      avatar: "https://i.pravatar.cc/150?img=5",
+      content: "прокомментировал(а): 'Обожаю это место! ❤️'",
+      time: "5 часов назад",
+      postPreview: "https://i.pravatar.cc/150?img=15",
+      read: true,
+    },
+    {
+      id: "6",
+      type: "follow",
+      user: "Даниил",
+      avatar: "https://i.pravatar.cc/150?img=6",
+      content: "начал(а) подписываться на вас",
+      time: "1 день назад",
+      postPreview: null,
+      read: true,
+    },
+  ];
+
+  const getNotificationIcon = (type) => {
+    switch (type) {
+      case "like":
+        return <HeartIcon />;
+      case "comment":
+        return <CommentIcon />;
+      case "share":
+        return <ShareIcon />;
+      case "follow":
+        return (
+          <Svg width={20} height={20} viewBox="0 0 24 24" fill="none">
+            <Path
+              d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"
+              stroke="#4CAF50"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <Path
+              d="M8.5 11a4 4 0 100-8 4 4 0 000 8zM20 8v6M23 11h-6"
+              stroke="#4CAF50"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </Svg>
+        );
+      default:
+        return null;
+    }
+  };
+
+  const getNotificationColor = (type) => {
+    switch (type) {
+      case "like":
+        return "#FF4081";
+      case "comment":
+        return "#4FC3F7";
+      case "share":
+        return "#7C4DFF";
+      case "follow":
+        return "#4CAF50";
+      default:
+        return "#16DBBE";
+    }
+  };
+
+  const styles = StyleSheet.create({
+    container: { 
+      flex: 1, 
+      backgroundColor: theme.background 
+    },
+    header: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      backgroundColor: theme.headerBg,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.borderColor,
+    },
+    backButton: {
+      padding: 8,
+    },
+    headerTitle: {
+      fontSize: 18,
+      fontWeight: "600",
+      color: theme.textColor,
+      textAlign: "center",
+      flex: 1,
+    },
+    scrollView: { 
+      flex: 1,
+      marginBottom: 70, // Отступ для нижнего меню
+    },
+    notificationItem: {
+      flexDirection: "row",
+      alignItems: "flex-start",
+      padding: 16,
+      marginHorizontal: 16,
+      marginVertical: 6,
+      backgroundColor: theme.cardBg,
+      borderRadius: 12,
+      borderLeftWidth: 4,
+      shadowColor: isDark ? "#000" : "#6B7280",
+      shadowOffset: { width: 0, height: 1 },
+      shadowOpacity: 0.1,
+      shadowRadius: 3,
+      elevation: 2,
+    },
+    notificationUnread: {
+      backgroundColor: isDark ? "#1E2A3A" : "#F0F9FF",
+    },
+    notificationContent: {
+      flex: 1,
+      marginLeft: 12,
+    },
+    notificationUser: {
+      fontWeight: "600",
+      fontSize: 16,
+      color: theme.textColor,
+      marginBottom: 4,
+    },
+    notificationText: {
+      fontSize: 14,
+      color: theme.secondaryText,
+      lineHeight: 20,
+    },
+    notificationTime: {
+      fontSize: 12,
+      color: theme.timeColor,
+      marginTop: 4,
+    },
+    notificationPreview: {
+      width: 50,
+      height: 50,
+      borderRadius: 8,
+      marginLeft: 12,
+    },
+    unreadDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: "#16DBBE",
+      position: "absolute",
+      top: 16,
+      right: 16,
+    },
+    navigationWrapper: { 
+      position: "absolute", 
+      bottom: 0, 
+      left: 0, 
+      right: 0, 
+      alignItems: "center" 
+    },
+    navigation: { 
+      width, 
+      height: 70, 
+      borderRadius: 10, 
+      overflow: "visible" 
+    },
+    navigationGradient: { 
+      width: "100%", 
+      height: "100%", 
+      borderRadius: 10, 
+      flexDirection: "row", 
+      justifyContent: "center", 
+      alignItems: "center" 
+    },
+    navItem: { 
+      width: STEP, 
+      height: 70, 
+      zIndex: 1 
+    },
+    navLink: { 
+      width: "100%", 
+      height: "100%", 
+      justifyContent: "center", 
+      alignItems: "center", 
+      position: "relative" 
+    },
+    iconWrapper: { 
+      position: "relative", 
+      alignItems: "center", 
+      justifyContent: "center" 
+    },
+    navText: { 
+      position: "absolute", 
+      fontWeight: "400", 
+      fontSize: 10, 
+      letterSpacing: 0.5 
+    },
+    circleWrapper: { 
+      position: "absolute", 
+      top: -25, 
+      left: 10, 
+      width: 50, 
+      height: 50, 
+      borderRadius: 25, 
+      justifyContent: "center", 
+      alignItems: "center", 
+      zIndex: 3, 
+      overflow: "hidden" 
+    },
+    circleGradient: { 
+      width: "100%", 
+      height: "100%", 
+      borderRadius: 25 
+    },
+    circleBorder: { 
+      position: "absolute", 
+      width: "100%", 
+      height: "100%", 
+      borderRadius: 25, 
+      borderWidth: 1.8, 
+      backgroundColor: "transparent" 
+    },
+    indicator: { 
+      left: 5, 
+      position: "absolute", 
+      top: -35, 
+      width: 70, 
+      height: 70, 
+      borderRadius: 35, 
+      borderWidth: 6, 
+      borderColor: isDark ? "#0F111E" : "#EAF0FF", 
+      justifyContent: "center", 
+      alignItems: "center" 
+    },
+    indicatorGradient: { 
+      width: "100%", 
+      height: "100%", 
+      borderRadius: 35, 
+      justifyContent: "center", 
+      alignItems: "center" 
+    },
+  });
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <BackIcon color={isDark ? "#FFFFFF" : "#1B1F33"} />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Уведомления</Text>
+        <View style={{ width: 24 }} />
+      </View>
+
+      <ScrollView 
+        ref={scrollViewRef}
+        style={styles.scrollView} 
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 20 }}
+      >
+        {notifications.map((notification) => (
+          <TouchableOpacity key={notification.id} activeOpacity={0.7}>
+            <View 
+              style={[
+                styles.notificationItem, 
+                { borderLeftColor: getNotificationColor(notification.type) },
+                !notification.read && styles.notificationUnread
+              ]}
+            >
+              <View style={{ alignItems: "center" }}>
+                <Image 
+                  source={{ uri: notification.avatar }} 
+                  style={{ width: 44, height: 44, borderRadius: 22 }} 
+                />
+                <View style={{ marginTop: 8 }}>
+                  {getNotificationIcon(notification.type)}
+                </View>
+              </View>
+
+              <View style={styles.notificationContent}>
+                <Text style={styles.notificationUser}>{notification.user}</Text>
+                <Text style={styles.notificationText}>{notification.content}</Text>
+                <Text style={styles.notificationTime}>{notification.time}</Text>
+              </View>
+
+              {notification.postPreview && (
+                <Image 
+                  source={{ uri: notification.postPreview }} 
+                  style={styles.notificationPreview} 
+                />
+              )}
+
+              {!notification.read && <View style={styles.unreadDot} />}
+            </View>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+
+      <View style={styles.navigationWrapper}>
+        <View style={styles.navigation}>
+          <LinearGradient colors={theme.navBackground} start={{ x: 1, y: 0 }} end={{ x: 0, y: 0 }} style={styles.navigationGradient}>
+            {tabs.map((tab, index) => {
+              const isRandom = tab.id === "random";
+              const IconComponent = tab.icon;
+
+              const activeOpacity = iconActiveOpacity(index);
+
+              return (
+                <TouchableOpacity 
+                  key={tab.id} 
+                  style={styles.navItem} 
+                  onPress={() => handleTabPress(tab.id)} 
+                  activeOpacity={0.8}
+                >
+                  <View style={styles.navLink}>
+                    <Animated.View style={[styles.iconWrapper, { transform: [{ translateY: iconTranslates[index] }] }]}>
+                      {isRandom ? <CubeIcon active={tab.id === activeTab} /> : <IconComponent color={theme.inactiveIcon} />}
+                      {!isRandom && (
+                        <Animated.View 
+                          pointerEvents="none" 
+                          style={{ 
+                            position: "absolute", 
+                            left: 0, 
+                            right: 0, 
+                            top: 0, 
+                            bottom: 0, 
+                            justifyContent: "center", 
+                            alignItems: "center", 
+                            opacity: activeOpacity 
+                          }}
+                        >
+                          <IconComponent color={theme.activeIcon} />
+                        </Animated.View>
+                      )}
+                    </Animated.View>
+
+                    <Animated.Text 
+                      style={[
+                        styles.navText, 
+                        { 
+                          opacity: textOpacities[index], 
+                          transform: [{ translateY: textTranslates[index] }], 
+                          color: isDark ? "#FFFFFF" : "#1B1F33" 
+                        }
+                      ]}
+                    >
+                      {tab.label}
+                    </Animated.Text>
+
+                    <Animated.View 
+                      pointerEvents="none" 
+                      style={[
+                        styles.circleWrapper, 
+                        { 
+                          transform: [{ scale: circleScales[index] }], 
+                          opacity: circleScales[index] 
+                        }
+                      ]}
+                    >
+                      <LinearGradient 
+                        colors={theme.indicatorGradient} 
+                        start={{ x: 0.1, y: 0 }} 
+                        end={{ x: 0.9, y: 1 }} 
+                        style={styles.circleGradient} 
+                      />
+                      <Animated.View 
+                        pointerEvents="none" 
+                        style={{ 
+                          position: "absolute", 
+                          justifyContent: "center", 
+                          alignItems: "center", 
+                          opacity: circleScales[index] 
+                        }}
+                      >
+                        {tab.id === "random" ? <CubeIcon active={true} /> : <IconComponent color={"#000"} />}
+                      </Animated.View>
+                      <View 
+                        style={[
+                          styles.circleBorder, 
+                          { borderColor: isDark ? "#0F111E" : "#FFFFFF" }
+                        ]} 
+                        pointerEvents="none" 
+                      />
+                    </Animated.View>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </LinearGradient>
+
+          <Animated.View style={[styles.indicator, { transform: [{ translateX: translateX }] }]}>
+            <LinearGradient 
+              colors={theme.indicatorGradient} 
+              start={{ x: 0.5, y: 0 }} 
+              end={{ x: 0.4, y: 1.5 }} 
+              style={styles.indicatorGradient} 
+            />
+          </Animated.View>
+        </View>
+      </View>
+
+      <CustomAlert visible={false} title="" message="" onClose={() => {}} />
+    </View>
+  );
+};
+
+export default NotificationsScreen;

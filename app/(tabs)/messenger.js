@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useContext } from "react";
 import {
   View,
+  Text,
   StyleSheet,
   TouchableOpacity,
   Dimensions,
@@ -11,11 +12,12 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import Svg, { Path, Defs, LinearGradient as SvgLinearGradient, Stop } from "react-native-svg";
 import { ThemeContext } from "../../src/context/ThemeContext";
-import { router, useLocalSearchParams } from "expo-router";
+import { router } from "expo-router";
 import CustomAlert from "../../components/CustomAlert";
 
 const { width } = Dimensions.get("window");
 const STEP = 70;
+const NAVIGATION_DELAY = 80;
 
 // ------------------- ICONS -------------------
 const HomeIcon = ({ color = "#000" }) => (
@@ -26,7 +28,10 @@ const HomeIcon = ({ color = "#000" }) => (
 
 const SearchIcon = ({ color = "#000" }) => (
   <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
-    <Path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zM9.5 14C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" fill={color} />
+    <Path
+      d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zM9.5 14C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"
+      fill={color}
+    />
   </Svg>
 );
 
@@ -61,19 +66,33 @@ const CubeIcon = ({ active = false }) => {
 
 const MessageIcon = ({ color = "#000" }) => (
   <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
-    <Path d="M20 2H4c-1.1 0-2 .9-2 2v20l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z" fill={color} />
+    <Path
+      d="M20 2H4c-1.1 0-2 .9-2 2v20l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"
+      fill={color}
+    />
   </Svg>
 );
 
 const AccountIcon = ({ color = "#000" }) => (
   <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
-    <Path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" fill={color} />
+    <Path
+      d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"
+      fill={color}
+    />
   </Svg>
 );
 
-// ------------------- MainScreen -------------------
-const MainScreen = () => {
-  const params = useLocalSearchParams();
+const BellIcon = ({ color = "#17E4C7", size = 24 }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path
+      d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.89 2 2 2zm6-6V9c0-3.07-1.63-5.64-4.5-6.32V2c0-.83-.67-1.5-1.5-1.5S10.5 1.17 10.5 2v.68C7.63 3.36 6 5.92 6 9v7l-2 2v1h16v-1l-2-2z"
+      fill={color}
+    />
+  </Svg>
+);
+
+// ------------------- NotificationsScreen -------------------
+const NotificationsScreen = () => {
   const { isDark } = useContext(ThemeContext);
 
   const tabs = [
@@ -91,6 +110,8 @@ const MainScreen = () => {
         indicatorGradient: ["#00DEE8", "#77EE5F"],
         activeIcon: "#FFFFFF",
         inactiveIcon: "#1FD3B9",
+        cardBg: "#1A1B30",
+        textColor: "#FFFFFF",
       }
     : {
         background: "#EAF0FF",
@@ -98,14 +119,14 @@ const MainScreen = () => {
         indicatorGradient: ["#00BFA6", "#5CE1E6"],
         activeIcon: "#1FD3B9",
         inactiveIcon: "#7C8599",
+        cardBg: "#FFFFFF",
+        textColor: "#1B1F33",
       };
 
-  const NAVIGATION_DELAY = 80;
-  const initialActive = "home";
+  const initialActive = "messenger";
   const [activeTab, setActiveTab] = useState(initialActive);
-  const [alertVisible, setAlertVisible] = useState(false);
-  const [alertConfig, setAlertConfig] = useState({ title: "", message: "" });
 
+  // анимационные refs
   const translateX = useRef(new Animated.Value(tabs.findIndex((t) => t.id === initialActive) * STEP)).current;
   const circleScales = useRef(tabs.map((t) => new Animated.Value(t.id === initialActive ? 1 : 0))).current;
   const iconTranslates = useRef(tabs.map((t) => new Animated.Value(t.id === initialActive ? -32 : 0))).current;
@@ -124,6 +145,7 @@ const MainScreen = () => {
       tension: 40,
     }).start();
 
+    // визуальные движения
     tabs.forEach((tab, i) => {
       const isActive = tab.id === activeTab;
       Animated.spring(circleScales[i], { toValue: isActive ? 1 : 0, useNativeDriver: true }).start();
@@ -135,21 +157,16 @@ const MainScreen = () => {
     });
   }, [activeTab]);
 
-  useEffect(() => {
-    if (params.showSuccessAlert === "true") {
-      setAlertConfig({ title: "Успех!", message: "Мем успешно выложен!" });
-      setAlertVisible(true);
-      router.setParams({ showSuccessAlert: undefined });
-    }
-  }, [params]);
-
   const navigateTo = (tabId) => {
-    if (navTimeoutRef.current) clearTimeout(navTimeoutRef.current);
+    if (navTimeoutRef.current) {
+      clearTimeout(navTimeoutRef.current);
+      navTimeoutRef.current = null;
+    }
 
     const navigate = () => {
       switch (tabId) {
         case "home":
-          router.push("/index");
+          router.push("/");
           break;
         case "search":
           router.push("/search");
@@ -180,6 +197,7 @@ const MainScreen = () => {
     navigateTo(tabId);
   };
 
+  // opacity активной иконки основана на положении translateX
   const iconActiveOpacity = (index) =>
     translateX.interpolate({
       inputRange: [(index - 0.36) * STEP, index * STEP, (index + 0.36) * STEP],
@@ -187,61 +205,69 @@ const MainScreen = () => {
       extrapolate: "clamp",
     });
 
-  const memes = Array.from({ length: 20 }).map((_, i) => ({
-    uri: `https://picsum.photos/300/${300 + Math.random() * 300}?random=${i}`,
-    id: i.toString(),
-    height: 200 + Math.random() * 200,
-  }));
-
-  const renderMasonryGrid = () => {
-    const columnWidth = (width - 24) / 2;
-    const columns = [[], []];
-    const columnHeights = [0, 0];
-
-    memes.forEach((meme) => {
-      const shortest = columnHeights[0] <= columnHeights[1] ? 0 : 1;
-      columns[shortest].push(meme);
-      columnHeights[shortest] += meme.height;
-    });
-
-    return (
-      <View style={styles.masonryContainer}>
-        {columns.map((column, colIndex) => (
-          <View key={colIndex} style={styles.column}>
-            {column.map((meme) => (
-<TouchableOpacity 
-  key={meme.id} 
-  style={[styles.memeItem, { width: columnWidth }]}
-  onPress={() => router.push({
-    pathname: '/post-detail',
-    params: {
-      postId: meme.id,
-      imageUri: meme.uri,
-      postType: 'otherPost'
-    }
-  })}
->
-  <Image
-    source={{ uri: meme.uri }}
-    style={[styles.memeImage, { height: meme.height }]}
-    resizeMode="cover"
-  />
-</TouchableOpacity>
-            ))}
-          </View>
-        ))}
-      </View>
-    );
-  };
+  // ---------------- MOCK ДАННЫЕ ----------------
+  const chats = [
+    {
+      id: "notifications",
+      name: "Уведомления",
+      message: "У вас новые реакции и комментарии",
+      isNotification: true,
+    },
+    {
+      id: "1",
+      name: "Аня",
+      message: "Ты идёшь завтра?",
+      avatar: "https://i.pravatar.cc/150?img=1",
+    },
+    {
+      id: "2",
+      name: "Максим",
+      message: "Скинь мем пожалуйста",
+      avatar: "https://i.pravatar.cc/150?img=2",
+    },
+    {
+      id: "3",
+      name: "Ира",
+      message: "Ахаах, орру 🤣",
+      avatar: "https://i.pravatar.cc/150?img=3",
+    },
+    {
+      id: "4",
+      name: "Влад",
+      message: "Сегодня созвон в 19:00",
+      avatar: "https://i.pravatar.cc/150?img=4",
+    },
+    {
+      id: "5",
+      name: "Света",
+      message: "Окей, завтра сделаю",
+      avatar: "https://i.pravatar.cc/150?img=5",
+    },
+  ];
 
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: theme.background },
     scrollView: { flex: 1 },
     scrollViewContent: { paddingBottom: 100 },
-    masonryContainer: { flexDirection: "row", paddingHorizontal: 8, paddingTop: 8 },
-    column: { flex: 1, marginHorizontal: 4 },
-    memeItem: { marginBottom: 8, borderRadius: 10, overflow: "hidden", backgroundColor: isDark ? "#1A1B30" : "#FFFFFF", shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 },
-    memeImage: { width: "100%", borderRadius: 10 },
+    chatItem: {
+      flexDirection: "row",
+      alignItems: "center",
+      padding: 12,
+      marginBottom: 8,
+      borderRadius: 10,
+    },
+    avatar: {
+      width: 50,
+      height: 50,
+      borderRadius: 25,
+      marginRight: 12,
+      justifyContent: "center",
+      alignItems: "center",
+    },
+    chatName: {
+      fontWeight: "600",
+      marginBottom: 2,
+    },
     navigationWrapper: { position: "absolute", bottom: 0, left: 0, right: 0, alignItems: "center" },
     navigation: { width, height: 70, borderRadius: 10, overflow: "visible" },
     navigationGradient: { width: "100%", height: "100%", borderRadius: 10, flexDirection: "row", justifyContent: "center", alignItems: "center" },
@@ -259,9 +285,36 @@ const MainScreen = () => {
   return (
     <View style={styles.container}>
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollViewContent} showsVerticalScrollIndicator={false}>
-        {renderMasonryGrid()}
+        {chats.map((chat) => (
+<TouchableOpacity 
+  key={chat.id} 
+  onPress={() => {
+    if (chat.id === "notifications") {
+      router.push("/chat/notifications");
+    } else {
+      router.push(`/chat/${chat.id}`);
+    }
+  }}
+  activeOpacity={0.7}
+>
+            <View style={[styles.chatItem, { backgroundColor: theme.cardBg }]}>
+              <View style={[styles.avatar, { backgroundColor: chat.isNotification ? (isDark ? "#1A1B30" : "#F0F2F7") : "transparent" }]}>
+                {chat.isNotification ? (
+                  <BellIcon />
+                ) : (
+                  <Image source={{ uri: chat.avatar }} style={{ width: 50, height: 50, borderRadius: 25 }} />
+                )}
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.chatName, { color: theme.textColor }]}>{chat.name}</Text>
+                <Text style={{ color: theme.textColor, opacity: 0.7 }}>{chat.message}</Text>
+              </View>
+            </View>
+          </TouchableOpacity>
+        ))}
       </ScrollView>
 
+      {/* ---------------- Нижнее меню ---------------- */}
       <View style={styles.navigationWrapper}>
         <View style={styles.navigation}>
           <LinearGradient colors={theme.navBackground} start={{ x: 1, y: 0 }} end={{ x: 0, y: 0 }} style={styles.navigationGradient}>
@@ -306,9 +359,9 @@ const MainScreen = () => {
         </View>
       </View>
 
-      <CustomAlert visible={alertVisible} title={alertConfig.title} message={alertConfig.message} onClose={() => setAlertVisible(false)} />
+      <CustomAlert visible={false} title="" message="" onClose={() => {}} />
     </View>
   );
 };
 
-export default MainScreen;
+export default NotificationsScreen;
