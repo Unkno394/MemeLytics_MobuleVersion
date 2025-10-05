@@ -1,50 +1,86 @@
-# Welcome to your Expo app 👋
+# MemePinterest - Социальная сеть для мемов 🎭
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+<div align="center">
 
-## Get started
+![React Native](https://img.shields.io/badge/React_Native-0.72-blue?style=for-the-badge&logo=react)
+![Expo](https://img.shields.io/badge/Expo-49-black?style=for-the-badge&logo=expo)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue?style=for-the-badge&logo=typescript)
+</div>
 
-1. Install dependencies
+## 🎯 О проекте
 
-   ```bash
-   npm install
-   ```
+MemePinterest - это современное мобильное приложение для создания, редактирования и распространения мемов. Платформа сочетает в себе удобство Pinterest с мощным редактором мемов, предлагая уникальный опыт для креативных пользователей.
 
-2. Start the app
+## ✨ Особенности
 
-   ```bash
-   npx expo start
-   ```
+### 🎨 **Редактор мемов**
+- 📝 **Текст с поддержкой emoji** - Twemoji рендеринг
+- 🎨 **Рисование** - Кисти, маркеры, стрелки
+- 🎛️ **Фильтры** - Градации серого, сепия, инвертирование и другие
+- 🖌️ **Пипетка** - Выбор цвета из изображения
+- 📐 **Трансформации** - Масштаб, поворот, перемещение
 
-In the output, you'll find options to open the app in a
+### 🏠 **Основные экраны**
+- **Лента** - Masonry grid с мемами
+- **Поиск** - Поиск и discovery контента
+- **Создание** - Мощный редактор мемов
+- **Профиль** - Личный кабинет с созданными и сохраненными мемами
+- **Мессенджер** - Чат с друзьями
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+### 🎭 **Уникальные возможности**
+- 🔄 **Темная/светлая тема** - Полная поддержка смены темы
+- ✨ **Анимированная навигация** - Кастомный bottom navigation
+- 🏷️ **Система комментариев** - С поддержкой emoji и ответами
+- 📤 **Шеринг** - Отправка мемов друзьям
+- 🔔 **Уведомления** - Лайки, комментарии, подписки
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+## 🛠 Технологический стек
 
-## Get a fresh project
+| Категория | Технологии |
+|-----------|------------|
+| **Фреймворк** | React Native 0.72, Expo 49 |
+| **Навигация** | Expo Router (File-based routing) |
+| **Стилизация** | StyleSheet, Linear Gradients |
+| **Анимации** | React Native Animated, Reanimated |
+| **Работа с медиа** | Expo Image Picker, Expo Media Library |
+| **Иконки** | React Native SVG, @expo/vector-icons |
+| **Шрифты** | Custom font loading |
+| **Хранение данных** | AsyncStorage |
 
-When you're ready, run:
+## 📦 Установка и запуск
+
+### Предварительные требования
+- Node.js 16+
+- npm или yarn
+- Expo CLI
+- iOS Simulator или Android Emulator
+
+### Шаги установки
 
 ```bash
-npm run reset-project
+# Клонирование репозитория
+git clone https://github.com/your-username/memepinterest.git
+cd memepinterest
+
+# Установка зависимостей
+npm install
+
+# Запуск в development режиме
+npx expo start
+
+# Для конкретной платформы
+npx expo start --ios
+npx expo start --android
+npx expo start --web
 ```
+### Сборка для продакшена
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+```bash
+# Сборка для Android
+npx expo prebuild --platform android
+npx eas build --platform android
 
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+# Сборка для iOS
+npx expo prebuild --platform ios
+npx eas build --platform ios
+```
