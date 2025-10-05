@@ -14,6 +14,7 @@ import Svg, { Path, Defs, LinearGradient as SvgLinearGradient, Stop } from "reac
 import { ThemeContext } from "../../../src/context/ThemeContext";
 import { router } from "expo-router";
 import CustomAlert from "../../../components/CustomAlert";
+import { EmojiText } from "../../../components/Twemoji";
 
 const { width, height } = Dimensions.get("window");
 const STEP = 70;
@@ -277,13 +278,14 @@ const NotificationsScreen = () => {
       extrapolate: "clamp",
     });
 
+ 
   const notifications = [
     {
       id: "1",
       type: "like",
       user: "Аня",
       avatar: "https://i.pravatar.cc/150?img=1",
-      content: "лайкнул(а) вашу публикацию",
+      content: "лайкнул(а) вашу публикацию ❤️",
       time: "5 мин назад",
       postPreview: "https://i.pravatar.cc/150?img=11",
       read: false,
@@ -293,7 +295,7 @@ const NotificationsScreen = () => {
       type: "comment",
       user: "Максим",
       avatar: "https://i.pravatar.cc/150?img=2",
-      content: "прокомментировал(а): 'Крутое фото! Где это?'",
+      content: "прокомментировал(а): 'Крутое фото! Где это? 🌍'",
       time: "1 час назад",
       postPreview: "https://i.pravatar.cc/150?img=12",
       read: false,
@@ -303,7 +305,7 @@ const NotificationsScreen = () => {
       type: "share",
       user: "Ира",
       avatar: "https://i.pravatar.cc/150?img=3",
-      content: "поделился(ась) вашей публикацией",
+      content: "поделился(ась) вашей публикацией 🔄",
       time: "2 часа назад",
       postPreview: "https://i.pravatar.cc/150?img=13",
       read: true,
@@ -313,7 +315,7 @@ const NotificationsScreen = () => {
       type: "like",
       user: "Влад",
       avatar: "https://i.pravatar.cc/150?img=4",
-      content: "лайкнул(а) вашу публикацию",
+      content: "лайкнул(а) вашу публикацию 👍",
       time: "3 часа назад",
       postPreview: "https://i.pravatar.cc/150?img=14",
       read: true,
@@ -323,7 +325,7 @@ const NotificationsScreen = () => {
       type: "comment",
       user: "Света",
       avatar: "https://i.pravatar.cc/150?img=5",
-      content: "прокомментировал(а): 'Обожаю это место! ❤️'",
+      content: "прокомментировал(а): 'Обожаю это место! ❤️✨'",
       time: "5 часов назад",
       postPreview: "https://i.pravatar.cc/150?img=15",
       read: true,
@@ -333,7 +335,7 @@ const NotificationsScreen = () => {
       type: "follow",
       user: "Даниил",
       avatar: "https://i.pravatar.cc/150?img=6",
-      content: "начал(а) подписываться на вас",
+      content: "начал(а) подписываться на вас 👤",
       time: "1 день назад",
       postPreview: null,
       read: true,
@@ -388,7 +390,7 @@ const NotificationsScreen = () => {
   };
 
   const styles = StyleSheet.create({
-    container: { 
+container: { 
       flex: 1, 
       backgroundColor: theme.background 
     },
@@ -413,7 +415,7 @@ const NotificationsScreen = () => {
     },
     scrollView: { 
       flex: 1,
-      marginBottom: 70, // Отступ для нижнего меню
+      marginBottom: 70,
     },
     notificationItem: {
       flexDirection: "row",
@@ -562,7 +564,7 @@ const NotificationsScreen = () => {
     <View style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <BackIcon color={isDark ? "#FFFFFF" : "#1B1F33"} />
+          <BackIcon color='#16DBBE'/>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Уведомления</Text>
         <View style={{ width: 24 }} />
@@ -595,7 +597,12 @@ const NotificationsScreen = () => {
 
               <View style={styles.notificationContent}>
                 <Text style={styles.notificationUser}>{notification.user}</Text>
-                <Text style={styles.notificationText}>{notification.content}</Text>
+                {/* Заменяем Text на EmojiText для поддержки эмодзи */}
+                <EmojiText 
+                  text={notification.content} 
+                  style={styles.notificationText}
+                  numberOfLines={2}
+                />
                 <Text style={styles.notificationTime}>{notification.time}</Text>
               </View>
 
@@ -611,6 +618,7 @@ const NotificationsScreen = () => {
           </TouchableOpacity>
         ))}
       </ScrollView>
+
 
       <View style={styles.navigationWrapper}>
         <View style={styles.navigation}>

@@ -16,6 +16,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import Svg, { Path, Defs, LinearGradient as SvgLinearGradient, Stop } from "react-native-svg";
 import { ThemeContext } from "../../src/context/ThemeContext";
 import { router } from 'expo-router';
+import { EmojiText } from "../../components/Twemoji";
 
 const { width, height } = Dimensions.get("window");
 const STEP = 70;
@@ -82,6 +83,7 @@ const CloseIcon = ({ color = "#FFF", size = 32 }) => (
 );
 
 const ProfileScreen = () => {
+  const [username, setUsername] = useState("User Name 😎");
   const { isDark } = useContext(ThemeContext);
   const [activeTab, setActiveTab] = useState("profile");
   const [activeMemeTab, setActiveMemeTab] = useState("created");
@@ -90,11 +92,11 @@ const ProfileScreen = () => {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
   const tabs = [
-    { id: "home", icon: HomeIcon, label: "Home" },
-    { id: "search", icon: SearchIcon, label: "Search" },
-    { id: "random", icon: CubeIcon, label: "Create" },
-    { id: "messenger", icon: MessageIcon, label: "Messenger" },
-    { id: "profile", icon: AccountIcon, label: "Profile" },
+    { id: "home", icon: HomeIcon, label: "Главная" },
+    { id: "search", icon: SearchIcon, label: "Поиск" },
+    { id: "random", icon: CubeIcon, label: "Создать" },
+    { id: "messenger", icon: MessageIcon, label: "Чаты" },
+    { id: "profile", icon: AccountIcon, label: "Профиль" },
   ];
 
   const theme = isDark
@@ -231,52 +233,50 @@ const ProfileScreen = () => {
     setCurrentImageIndex(index);
   };
 
-  // Masonry grid
   const renderMasonryGrid = (memes, isCreatedTab) => {
-    const columnWidth = (width - 24) / 2;
-    const columns = [[], []];
-    const columnHeights = [0, 0];
+  const columnWidth = (width - 24) / 2;
+  const columns = [[], []];
+  const columnHeights = [0, 0];
 
-    memes.forEach((meme) => {
-      const shortestColumnIndex = columnHeights[0] <= columnHeights[1] ? 0 : 1;
-      columns[shortestColumnIndex].push(meme);
-      columnHeights[shortestColumnIndex] += meme.height;
-    });
+  memes.forEach((meme) => {
+    const shortestColumnIndex = columnHeights[0] <= columnHeights[1] ? 0 : 1;
+    columns[shortestColumnIndex].push(meme);
+    columnHeights[shortestColumnIndex] += meme.height;
+  });
 
-    return (
-      <View style={styles.masonryContainer}>
-        {columns.map((column, columnIndex) => (
-          <View key={columnIndex} style={styles.column}>
-            {column.map((meme, memeIndex) => {
-              const absoluteIndex = columnIndex === 0 ? memeIndex : columns[0].length + memeIndex;
-              return (
-                <TouchableOpacity 
-                  key={meme.id} 
-                  style={[styles.memeItem, { width: columnWidth }]}
-                  onPress={() => router.push({
-                    pathname: '/post-detail',
-                    params: {
-                      postId: meme.id,
-                      imageUri: meme.uri,
-                      postType: isCreatedTab ? 'ownPost' : 'savedPost' // Свои посты для созданных, сохраненные для saved
-                    }
-                  })}
-                >
-                  <Image
-                    source={{ uri: meme.uri }}
-                    style={[styles.memeImage, { height: meme.height }]}
-                    resizeMode="cover"
-                  />
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        ))}
-      </View>
-    );
-  };
+  return (
+    <View style={styles.masonryContainer}>
+      {columns.map((column, columnIndex) => (
+        <View key={columnIndex} style={styles.column}>
+          {column.map((meme, memeIndex) => {
+            const absoluteIndex = columnIndex === 0 ? memeIndex : columns[0].length + memeIndex;
+            return (
+              <TouchableOpacity 
+                key={meme.id} 
+                style={[styles.memeItem, { width: columnWidth }]}
+                onPress={() => router.push({
+                  pathname: '/post-detail',
+                  params: {
+                    postId: meme.id,
+                    imageUri: meme.uri,
+                    postType: isCreatedTab ? 'ownPost' : 'savedPost'
+                  }
+                })}
+              >
+                <Image
+                  source={{ uri: meme.uri }}
+                  style={[styles.memeImage, { height: meme.height }]}
+                  resizeMode="cover"
+                />
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      ))}
+    </View>
+  );
+};
 
-  // Стили
   const styles = StyleSheet.create({
     container: { 
       flex: 1,
@@ -477,7 +477,10 @@ const ProfileScreen = () => {
               style={styles.avatar}
             />
           </TouchableOpacity>
-          <Text style={styles.userName}>User Name</Text>
+<EmojiText 
+  text={username || "User Name"} 
+  style={styles.userName}
+/>
 
           <TouchableOpacity
             style={styles.shareButton}

@@ -77,11 +77,11 @@ const MainScreen = () => {
   const { isDark } = useContext(ThemeContext);
 
   const tabs = [
-    { id: "home", icon: HomeIcon, label: "Home" },
-    { id: "search", icon: SearchIcon, label: "Search" },
-    { id: "random", icon: CubeIcon, label: "Create" },
-    { id: "messenger", icon: MessageIcon, label: "Messenger" },
-    { id: "profile", icon: AccountIcon, label: "Profile" },
+    { id: "home", icon: HomeIcon, label: "Главная" },
+    { id: "search", icon: SearchIcon, label: "Поиск" },
+    { id: "random", icon: CubeIcon, label: "Создать" },
+    { id: "messenger", icon: MessageIcon, label: "Чаты" },
+    { id: "profile", icon: AccountIcon, label: "Профиль" },
   ];
 
   const theme = isDark
@@ -194,46 +194,45 @@ const MainScreen = () => {
   }));
 
   const renderMasonryGrid = () => {
-    const columnWidth = (width - 24) / 2;
-    const columns = [[], []];
-    const columnHeights = [0, 0];
+  const columnWidth = (width - 24) / 2;
+  const columns = [[], []];
+  const columnHeights = [0, 0];
 
-    memes.forEach((meme) => {
-      const shortest = columnHeights[0] <= columnHeights[1] ? 0 : 1;
-      columns[shortest].push(meme);
-      columnHeights[shortest] += meme.height;
-    });
+  memes.forEach((meme) => {
+    const shortest = columnHeights[0] <= columnHeights[1] ? 0 : 1;
+    columns[shortest].push(meme);
+    columnHeights[shortest] += meme.height;
+  });
 
-    return (
-      <View style={styles.masonryContainer}>
-        {columns.map((column, colIndex) => (
-          <View key={colIndex} style={styles.column}>
-            {column.map((meme) => (
-<TouchableOpacity 
-  key={meme.id} 
-  style={[styles.memeItem, { width: columnWidth }]}
-  onPress={() => router.push({
-    pathname: '/post-detail',
-    params: {
-      postId: meme.id,
-      imageUri: meme.uri,
-      postType: 'otherPost'
-    }
-  })}
->
-  <Image
-    source={{ uri: meme.uri }}
-    style={[styles.memeImage, { height: meme.height }]}
-    resizeMode="cover"
-  />
-</TouchableOpacity>
-            ))}
-          </View>
-        ))}
-      </View>
-    );
-  };
-
+  return (
+    <View style={styles.masonryContainer}>
+      {columns.map((column, colIndex) => (
+        <View key={colIndex} style={styles.column}>
+          {column.map((meme) => (
+            <TouchableOpacity 
+              key={meme.id} 
+              style={[styles.memeItem, { width: columnWidth }]}
+              onPress={() => router.push({
+                pathname: '/post-detail',
+                params: {
+                  postId: meme.id,
+                  imageUri: meme.uri,
+                  postType: 'feedPost' // Изменил на feedPost для ленты
+                }
+              })}
+            >
+              <Image
+                source={{ uri: meme.uri }}
+                style={[styles.memeImage, { height: meme.height }]}
+                resizeMode="cover"
+              />
+            </TouchableOpacity>
+          ))}
+        </View>
+      ))}
+    </View>
+  );
+};
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: theme.background },
     scrollView: { flex: 1 },

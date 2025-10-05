@@ -1,104 +1,104 @@
 // constants/modalConfigs.js
 export const modalConfigs = {
   // Для собственных постов пользователя
-  ownPost: (theme) => ({
+  ownPost: (theme, handlers = {}) => ({
     items: [
       {
         id: 'download',
         label: 'Скачать изображение',
         icon: 'download',
-        onPress: () => console.log('Download own post'),
+        onPress: handlers.onDownload || (() => console.log('Download own post')),
       },
       {
         id: 'edit',
         label: 'Редактировать',
         icon: 'edit',
-        onPress: () => console.log('Edit post'),
+        onPress: handlers.onEdit || (() => console.log('Edit post')),
       },
       {
         id: 'delete',
         label: 'Удалить',
         icon: 'trash-2',
         danger: true,
-        onPress: () => console.log('Delete post'),
+        onPress: handlers.onDelete || (() => console.log('Delete post')),
       },
     ],
     theme: theme,
   }),
 
   // Для чужих постов (только просмотр)
-  otherPost: (theme) => ({
+  otherPost: (theme, handlers = {}) => ({
     items: [
       {
         id: 'download',
         label: 'Скачать изображение',
         icon: 'download',
-        onPress: () => console.log('Download other post'),
+        onPress: handlers.onDownload || (() => console.log('Download other post')),
       },
       {
         id: 'hide',
         label: 'Скрыть',
         icon: 'eye-off',
-        onPress: () => console.log('Hide post'),
+        onPress: handlers.onHide || (() => console.log('Hide post')),
       },
       {
         id: 'report',
         label: 'Пожаловаться',
         icon: 'flag',
         danger: true,
-        onPress: () => console.log('Report post'),
+        onPress: handlers.onReport || (() => console.log('Report post')),
       },
     ],
     theme: theme,
   }),
 
   // Для сохраненных постов
-  savedPost: (theme) => ({
+  savedPost: (theme, handlers = {}) => ({
     items: [
       {
         id: 'download',
         label: 'Скачать изображение',
         icon: 'download',
-        onPress: () => console.log('Download saved post'),
+        onPress: handlers.onDownload || (() => console.log('Download saved post')),
       },
       {
         id: 'unsave',
         label: 'Удалить из сохраненных',
         icon: 'bookmark',
-        onPress: () => console.log('Unsave post'),
+        onPress: handlers.onUnsave || (() => console.log('Unsave post')),
       },
       {
         id: 'report',
         label: 'Пожаловаться',
         icon: 'flag',
         danger: true,
-        onPress: () => console.log('Report saved post'),
+        onPress: handlers.onReport || (() => console.log('Report saved post')),
       },
     ],
     theme: theme,
   }),
 
   // Для постов в ленте (index.js)
-  feedPost: (theme) => ({
+  feedPost: (theme, handlers = {}) => ({
     items: [
       {
         id: 'download',
         label: 'Скачать изображение',
         icon: 'download',
-        onPress: () => console.log('Download feed post'),
+        onPress: handlers.onDownload || (() => console.log('Download feed post')),
       },
       {
         id: 'hide',
         label: 'Скрыть',
         icon: 'eye-off',
-        onPress: () => console.log('Hide feed post'),
+        onPress: handlers.onHide || (() => console.log('Hide feed post')),
       },
       {
         id: 'report',
         label: 'Пожаловаться',
         icon: 'flag',
         danger: true,
-        onPress: () => console.log('Report feed post'),
+        onPress: handlers.onReport || (() => console.log('Report feed post')),
       },
     ],
     theme: theme,

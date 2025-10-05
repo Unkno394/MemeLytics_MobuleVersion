@@ -14,6 +14,7 @@ import Svg, { Path, Defs, LinearGradient as SvgLinearGradient, Stop } from "reac
 import { ThemeContext } from "../../src/context/ThemeContext";
 import { router } from "expo-router";
 import CustomAlert from "../../components/CustomAlert";
+import { EmojiText } from "../../components/Twemoji";
 
 const { width } = Dimensions.get("window");
 const STEP = 70;
@@ -96,11 +97,11 @@ const NotificationsScreen = () => {
   const { isDark } = useContext(ThemeContext);
 
   const tabs = [
-    { id: "home", icon: HomeIcon, label: "Home" },
-    { id: "search", icon: SearchIcon, label: "Search" },
-    { id: "random", icon: CubeIcon, label: "Create" },
-    { id: "messenger", icon: MessageIcon, label: "Messenger" },
-    { id: "profile", icon: AccountIcon, label: "Profile" },
+    { id: "home", icon: HomeIcon, label: "Главная" },
+    { id: "search", icon: SearchIcon, label: "Поиск" },
+    { id: "random", icon: CubeIcon, label: "Создать" },
+    { id: "messenger", icon: MessageIcon, label: "Чаты" },
+    { id: "profile", icon: AccountIcon, label: "Профиль" },
   ];
 
   const theme = isDark
@@ -209,41 +210,42 @@ const NotificationsScreen = () => {
   const chats = [
     {
       id: "notifications",
-      name: "Уведомления",
-      message: "У вас новые реакции и комментарии",
+      name: "Уведомления 🔔",
+      message: "У вас новые реакции и комментарии 🎉",
       isNotification: true,
     },
     {
       id: "1",
-      name: "Аня",
-      message: "Ты идёшь завтра?",
+      name: "Аня 👩‍💻",
+      message: "Ты идёшь завтра? 🎯",
       avatar: "https://i.pravatar.cc/150?img=1",
     },
     {
       id: "2",
-      name: "Максим",
-      message: "Скинь мем пожалуйста",
+      name: "Максим 💪",
+      message: "Скинь мем пожалуйста 😂",
       avatar: "https://i.pravatar.cc/150?img=2",
     },
     {
       id: "3",
-      name: "Ира",
-      message: "Ахаах, орру 🤣",
+      name: "Ира ✨",
+      message: "Ахаах, орру 🤣🔥",
       avatar: "https://i.pravatar.cc/150?img=3",
     },
     {
       id: "4",
-      name: "Влад",
-      message: "Сегодня созвон в 19:00",
+      name: "Влад 🚀",
+      message: "Сегодня созвон в 19:00 ⏰",
       avatar: "https://i.pravatar.cc/150?img=4",
     },
     {
       id: "5",
-      name: "Света",
-      message: "Окей, завтра сделаю",
+      name: "Света 🌸",
+      message: "Окей, завтра сделаю ✅",
       avatar: "https://i.pravatar.cc/150?img=5",
     },
   ];
+
 
   const styles = StyleSheet.create({
     container: { flex: 1, backgroundColor: theme.background },
@@ -267,6 +269,13 @@ const NotificationsScreen = () => {
     chatName: {
       fontWeight: "600",
       marginBottom: 2,
+      fontSize: 16,
+      color: theme.textColor,
+    },
+    messageText: {
+      fontSize: 14,
+      color: theme.textColor,
+      opacity: 0.7,
     },
     navigationWrapper: { position: "absolute", bottom: 0, left: 0, right: 0, alignItems: "center" },
     navigation: { width, height: 70, borderRadius: 10, overflow: "visible" },
@@ -283,20 +292,20 @@ const NotificationsScreen = () => {
   });
 
   return (
-    <View style={styles.container}>
+     <View style={styles.container}>
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollViewContent} showsVerticalScrollIndicator={false}>
         {chats.map((chat) => (
-<TouchableOpacity 
-  key={chat.id} 
-  onPress={() => {
-    if (chat.id === "notifications") {
-      router.push("/chat/notifications");
-    } else {
-      router.push(`/chat/${chat.id}`);
-    }
-  }}
-  activeOpacity={0.7}
->
+          <TouchableOpacity 
+            key={chat.id} 
+            onPress={() => {
+              if (chat.id === "notifications") {
+                router.push("/chat/notifications");
+              } else {
+                router.push(`/chat/${chat.id}`);
+              }
+            }}
+            activeOpacity={0.7}
+          >
             <View style={[styles.chatItem, { backgroundColor: theme.cardBg }]}>
               <View style={[styles.avatar, { backgroundColor: chat.isNotification ? (isDark ? "#1A1B30" : "#F0F2F7") : "transparent" }]}>
                 {chat.isNotification ? (
@@ -306,8 +315,18 @@ const NotificationsScreen = () => {
                 )}
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.chatName, { color: theme.textColor }]}>{chat.name}</Text>
-                <Text style={{ color: theme.textColor, opacity: 0.7 }}>{chat.message}</Text>
+                {/* Заменяем Text на EmojiText для имени */}
+                <EmojiText 
+                  text={chat.name} 
+                  style={styles.chatName}
+                  numberOfLines={1}
+                />
+                {/* Заменяем Text на EmojiText для сообщения */}
+                <EmojiText 
+                  text={chat.message} 
+                  style={styles.messageText}
+                  numberOfLines={1}
+                />
               </View>
             </View>
           </TouchableOpacity>

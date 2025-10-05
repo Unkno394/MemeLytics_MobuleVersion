@@ -1,22 +1,22 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, Modal, StyleSheet, Animated, TouchableWithoutFeedback } from 'react-native';
+import React, { useEffect, useState } from 'react'; 
+import { View, Text, Modal, StyleSheet, Animated, TouchableWithoutFeedback, TouchableOpacity } from 'react-native';
 import { ThemeContext } from '../src/context/ThemeContext';
 
 const CustomAlert = ({ 
   visible, 
   title, 
   message, 
+  buttons = [], // Массив кнопок: [{ text: 'OK', onPress: () => {} }]
   onClose 
 }) => {
   const { isDark } = React.useContext(ThemeContext);
   
   // Состояние анимации для подъема
-  const [fadeAnim] = useState(new Animated.Value(0)); // Начальное значение 0 (невидим)
-  const [translateY] = useState(new Animated.Value(-200)); // Начальная позиция -200 (снаружи экрана)
+  const [fadeAnim] = useState(new Animated.Value(0));
+  const [translateY] = useState(new Animated.Value(-200));
 
   useEffect(() => {
     if (visible) {
-      // Анимация появления
       Animated.parallel([
         Animated.timing(fadeAnim, {
           toValue: 1,
@@ -24,13 +24,12 @@ const CustomAlert = ({
           useNativeDriver: true,
         }),
         Animated.timing(translateY, {
-          toValue: 0, // Позиция на экране (вверх, около челки)
+          toValue: 0,
           duration: 300,
           useNativeDriver: true,
         }),
       ]).start();
     } else {
-      // Анимация скрытия
       Animated.parallel([
         Animated.timing(fadeAnim, {
           toValue: 0,
@@ -38,7 +37,7 @@ const CustomAlert = ({
           useNativeDriver: true,
         }),
         Animated.timing(translateY, {
-          toValue: -200, // Возвращаем за экран
+          toValue: -200,
           duration: 300,
           useNativeDriver: true,
         }),
@@ -47,7 +46,14 @@ const CustomAlert = ({
   }, [visible]);
 
   const handleClose = () => {
-    if (onClose) onClose();  // Закрытие с помощью переданной функции
+    if (onClose) onClose();
+  };
+
+  // Если кнопок нет - закрываем по тапу
+  const handleOverlayPress = () => {
+    if (buttons.length === 0) {
+      handleClose();
+    }
   };
 
   return (
@@ -57,7 +63,7 @@ const CustomAlert = ({
       animationType="none"
       onRequestClose={handleClose}
     >
-      <TouchableWithoutFeedback onPress={handleClose}>
+      <TouchableWithoutFeedback onPress={handleOverlayPress}>
         <View style={styles.overlay}>
           <Animated.View
             style={[ 
@@ -75,6 +81,38 @@ const CustomAlert = ({
             <Text style={[styles.message, { color: isDark ? '#ccc' : '#666' }]}>
               {message}
             </Text>
+            
+            {/* Кнопки только если они есть */}
+            {buttons.length > 0 && (
+              <View style={styles.buttonsContainer}>
+                {buttons.map((button, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={[
+                      styles.button,
+                      index === 0 && styles.primaryButton,
+                      { 
+                        backgroundColor: index === 0 ? '#16DBBE' : 'transparent',
+                        borderColor: isDark ? '#444' : '#ddd'
+                      }
+                    ]}
+                    onPress={() => {
+                      button.onPress?.();
+                      handleClose();
+                    }}
+                  >
+                    <Text style={[
+                      styles.buttonText,
+                      { 
+                        color: index === 0 ? '#fff' : (isDark ? '#16DBBE' : '#16A085')
+                      }
+                    ]}>
+                      {button.text}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
           </Animated.View>
         </View>
       </TouchableWithoutFeedback>
@@ -85,15 +123,15 @@ const CustomAlert = ({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)', // Полупрозрачный фон
-    justifyContent: 'flex-start', // Это важно для того, чтобы алерт располагался сверху
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-start',
     alignItems: 'center',
-    paddingTop: 50, // Отступ сверху (в районе челки)
+    paddingTop: 50,
     paddingLeft: 20,
     paddingRight: 20,
   },
   alertContainer: {
-    width: '90%', // Ширина алерта
+    width: '90%',
     borderRadius: 12,
     padding: 24,
     elevation: 5,
@@ -101,8 +139,8 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
-    alignItems: 'center', // Центрируем содержимое
-    marginTop: 10, // Это позволит выстраивать алерты друг за другом
+    alignItems: 'center',
+    marginTop: 10,
   },
   title: {
     fontSize: 20,
@@ -115,6 +153,28 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 24,
     lineHeight: 20,
+  },
+  buttonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    width: '100%',
+    marginTop: 8,
+  },
+  button: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    marginHorizontal: 6,
+    borderWidth: 1,
+    alignItems: 'center',
+  },
+  primaryButton: {
+    borderWidth: 0,
+  },
+  buttonText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 

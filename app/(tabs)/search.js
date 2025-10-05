@@ -76,6 +76,11 @@ const SearchScreen = () => {
   const { isDark } = useContext(ThemeContext);
   const [query, setQuery] = useState("");
   const [activeTab, setActiveTab] = useState("search");
+  const [isInputFocused, setIsInputFocused] = useState(false);
+
+  // Анимация для перемещения иконки поиска
+  const searchIconPosition = useRef(new Animated.Value(0)).current;
+  const inputRef = useRef(null);
 
   const tabs = [
     { id: "home", icon: HomeIcon, label: "Home" },
@@ -117,6 +122,16 @@ const SearchScreen = () => {
   const textTranslates = useRef(tabs.map((t) => new Animated.Value(t.id === activeTab ? 10 : 20))).current;
 
   const navTimeoutRef = useRef(null);
+
+  // Анимация перемещения иконки поиска
+  useEffect(() => {
+    Animated.spring(searchIconPosition, {
+      toValue: isInputFocused ? 1 : 0,
+      useNativeDriver: true,
+      friction: 8,
+      tension: 40,
+    }).start();
+  }, [isInputFocused]);
 
   // Анимация как в index.js
   useEffect(() => {
@@ -188,6 +203,29 @@ const SearchScreen = () => {
     navigateTo(tabId);
   };
 
+  // Функция поиска
+  const handleSearch = () => {
+    if (query.trim()) {
+      // Здесь будет логика поиска
+      console.log("Searching for:", query);
+      // Например, можно добавить вызов API поиска
+    }
+  };
+
+  // Функция для сброса фокуса
+  const handleBlur = () => {
+    setIsInputFocused(false);
+    if (inputRef.current) {
+      inputRef.current.blur();
+    }
+  };
+
+  // Интерполяция для позиции иконки
+  const searchIconTranslateX = searchIconPosition.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, width - 90] // Перемещаем иконку вправо
+  });
+
   // Стили
   const styles = StyleSheet.create({
     container: { 
@@ -202,12 +240,24 @@ const SearchScreen = () => {
       paddingVertical: 8,
       borderRadius: 12,
       backgroundColor: theme.inputBg,
+      position: "relative",
     },
     input: {
       flex: 1,
       marginLeft: 8,
       fontSize: 16,
       color: theme.inputText,
+      paddingRight: 50, // Добавляем отступ справа, чтобы текст не заезжал на иконку
+      textAlignVertical: 'top', // Для лучшего отображения многострочного текста
+    },
+    // Анимированный значок поиска
+    searchIconContainer: {
+      position: "absolute",
+      left: 12,
+      zIndex: 10,
+    },
+    searchIconButton: {
+      padding: 4,
     },
     scrollView: {
       flex: 1,
@@ -289,57 +339,81 @@ const SearchScreen = () => {
 
   // Водопадная сетка
   const renderMasonryGrid = () => {
-    const columnWidth = (width - 24) / 2;
-    const columns = [[], []];
-    const columnHeights = [0, 0];
+  const columnWidth = (width - 24) / 2;
+  const columns = [[], []];
+  const columnHeights = [0, 0];
 
-    memes.forEach((meme) => {
-      const shortestColumnIndex = columnHeights[0] <= columnHeights[1] ? 0 : 1;
-      columns[shortestColumnIndex].push(meme);
-      columnHeights[shortestColumnIndex] += meme.height;
-    });
+  memes.forEach((meme) => {
+    const shortestColumnIndex = columnHeights[0] <= columnHeights[1] ? 0 : 1;
+    columns[shortestColumnIndex].push(meme);
+    columnHeights[shortestColumnIndex] += meme.height;
+  });
 
-    return (
-      <View style={styles.masonryContainer}>
-        {columns.map((column, columnIndex) => (
-          <View key={columnIndex} style={styles.column}>
-            {column.map((meme) => (
-<TouchableOpacity 
-  key={meme.id} 
-  style={[styles.memeItem, { width: columnWidth }]}
-  onPress={() => router.push({
-    pathname: '/post-detail',
-    params: {
-      postId: meme.id,
-      imageUri: meme.uri,
-      postType: 'otherPost'
-    }
-  })}
->
-  <Image
-    source={{ uri: meme.uri }}
-    style={[styles.memeImage, { height: meme.height }]}
-    resizeMode="cover"
-  />
-</TouchableOpacity>
-            ))}
-          </View>
-        ))}
-      </View>
-    );
-  };
+  return (
+    <View style={styles.masonryContainer}>
+      {columns.map((column, columnIndex) => (
+        <View key={columnIndex} style={styles.column}>
+          {column.map((meme) => (
+            <TouchableOpacity 
+              key={meme.id} 
+              style={[styles.memeItem, { width: columnWidth }]}
+              onPress={() => router.push({
+                pathname: '/post-detail',
+                params: {
+                  postId: meme.id,
+                  imageUri: meme.uri,
+                  postType: 'otherPost' // Для поиска
+                }
+              })}
+            >
+              <Image
+                source={{ uri: meme.uri }}
+                style={[styles.memeImage, { height: meme.height }]}
+                resizeMode="cover"
+              />
+            </TouchableOpacity>
+          ))}
+        </View>
+      ))}
+    </View>
+  );
+};
 
   return (
     <View style={styles.container}>
-      {/* Поисковая строка */}
+      {/* Поисковая строка с анимированным значком */}
       <View style={styles.searchBar}>
-        <SearchIcon color={theme.placeholder} />
+        {/* Анимированный значок поиска */}
+        <Animated.View 
+          style={[
+            styles.searchIconContainer, 
+            { 
+              transform: [{ translateX: searchIconTranslateX }]
+            }
+          ]}
+        >
+          <TouchableOpacity 
+            style={styles.searchIconButton}
+            onPress={isInputFocused ? handleSearch : () => inputRef.current?.focus()}
+          >
+            <SearchIcon color={isInputFocused ? theme.activeIcon : theme.placeholder} />
+          </TouchableOpacity>
+        </Animated.View>
+        
         <TextInput
+          ref={inputRef}
           value={query}
           onChangeText={setQuery}
           placeholder="Поиск мемов..."
           placeholderTextColor={theme.placeholder}
-          style={styles.input}
+          style={[styles.input, { marginLeft: 40 }]}
+          onFocus={() => setIsInputFocused(true)}
+          onBlur={() => setIsInputFocused(false)}
+          onSubmitEditing={handleSearch}
+          returnKeyType="search"
+          multiline={true} // Разрешаем многострочный ввод
+          numberOfLines={2} // Максимум 2 строки
+          maxLength={100} // Ограничиваем максимальную длину
         />
       </View>
 

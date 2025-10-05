@@ -46,7 +46,7 @@ import Expo2DContext from "expo-2d-context";
 import { Asset } from "expo-asset";
 import CustomAlert from '../../components/CustomAlert';
 import { router } from 'expo-router';
-
+import { captureRef } from "react-native-view-shot";
 
 LogBox.ignoreLogs([
   "Warning: Cannot update a component from inside the function body of a different component",
@@ -428,6 +428,8 @@ const ScalableFilteredImage = ({
 };
 
 const CreateMemeScreen = () => {
+  const [editMode, setEditMode] = useState(false);
+  const [incomingImageUri, setIncomingImageUri] = useState(null);
   const [fontsLoaded] = useAppFonts();
   const { isDark } = useContext(ThemeContext);
   const navigation = useNavigation();
@@ -661,7 +663,31 @@ const showConfirm = (title, message, onConfirm, onCancel) => {
       ]);
     }
   };
+useEffect(() => {
+    const checkForEditParams = async () => {
+      try {
+        // Проверяем, есть ли параметры в AsyncStorage или другом хранилище
+        const editParams = await AsyncStorage.getItem('EDIT_MEME_PARAMS');
+        if (editParams) {
+          const params = JSON.parse(editParams);
+          if (params.editMode && params.imageUri) {
+            setEditMode(true);
+            setIncomingImageUri(params.imageUri);
+            setImage(params.imageUri);
+            updateImageDimensions(params.imageUri);
+            showSuccess('Режим редактирования', 'Теперь вы можете редактировать этот мем');
+            
+            // Очищаем параметры после использования
+            await AsyncStorage.removeItem('EDIT_MEME_PARAMS');
+          }
+        }
+      } catch (error) {
+        console.log('Error checking edit params:', error);
+      }
+    };
 
+    checkForEditParams();
+  }, []);
  // 3. Исправляем useEffect для GL контекста (добавляем imageLayout.width)
 useEffect(() => {
   if (!image || !glContextRef.current || !imageLayout.width || !imageDimensions.height) return;
@@ -1086,7 +1112,7 @@ useEffect(() => {
 
         {/* ОСНОВНОЙ КОНТЕЙНЕР */}
         <View style={styles.previewWrapper}>
-  <ViewShot ref={viewShotRef} options={{ format: "jpg", quality: 0.9 }}>
+  <ViewShot ref={viewShotRef} options={{ format: "jpg", quality: 0.9 }} style={styles.previewWrapper}>
     <View
       ref={imageRef}
       style={[
@@ -1411,16 +1437,41 @@ useEffect(() => {
 
 <TouchableOpacity
   style={[styles.button, (!image || isLoading) && styles.buttonDisabled]}
-  onPress={saveMeme}
+  onPress={async () => {
+    if (!image || isLoading) return;
+    
+    setIsLoading(true);
+    try {
+      // ✅ Захватываем текущий кадр как итоговое изображение
+      const uri = await captureRef(viewShotRef.current, {
+        format: "jpg",
+        quality: 0.95,
+      });
+
+      console.log("📸 Итоговое изображение создано:", uri);
+      
+      // 🚀 Передаём итоговое изображение в previewPost
+      router.push({
+        pathname: '/previewPost',
+        params: { memeUri: uri },
+      });
+    } catch (err) {
+      console.error("❌ Ошибка при создании предпросмотра:", err);
+      showError("Не удалось создать предпросмотр");
+    } finally {
+      setIsLoading(false);
+    }
+  }}
   disabled={!image || isLoading}
 >
   <View style={styles.buttonContent}>
-    <Icon name="cloud-upload" size={18} color="#fff" />
+    <Icon name="arrow-forward" size={18} color="#fff" />
     <Text style={styles.buttonText}>
-      {isLoading ? "Сохранение..." : "Выложить"}
+      {isLoading ? "Загрузка..." : "Далее"}
     </Text>
   </View>
 </TouchableOpacity>
+
 
 
         <View style={{ height: 50 }} />
@@ -1517,6 +1568,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
+  previewWrapper: {
+  position: 'relative',
+  width: SCREEN_WIDTH,
+  backgroundColor: 'transparent',
+},
   colorBox: {
     width: 32,
     height: 32,
