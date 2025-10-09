@@ -1,20 +1,40 @@
-// components/Magnifier.js
-import React, { forwardRef, useImperativeHandle, useRef, useState, useEffect } from "react";
-import { View, StyleSheet } from "react-native";
-import { WebView } from "react-native-webview";
+// components/magnifier.js
 import * as FileSystem from "expo-file-system/legacy";
+import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
+import { StyleSheet, View } from "react-native";
+import { WebView } from "react-native-webview";
 
 const Magnifier = forwardRef(
   ({ imageUri, x = 0, y = 0, size = 120, zoom = 3, onColorPicked }, ref) => {
     const lastColor = useRef("#FFFFFF");
     const webViewRef = useRef(null);
     const [src, setSrc] = useState(null);
-    const targetCoords = useRef({ x: 0, y: 0 });
-    const animationId = useRef(null);
-    const isWebViewReady = useRef(false);
+    const [currentCoords, setCurrentCoords] = useState({ x, y });
 
     useImperativeHandle(ref, () => ({
       getPickedColor: () => lastColor.current,
+      updateCoords: (newX, newY) => {
+        // Проверяем, изменились ли координаты значительно
+        const deltaX = Math.abs(newX - currentCoords.x);
+        const deltaY = Math.abs(newY - currentCoords.y);
+        
+        if (deltaX > 1 || deltaY > 1) { // Обновляем только при значительном изменении
+          setCurrentCoords({ x: newX, y: newY });
+          if (webViewRef.current) {
+            // Используем injectJavaScript для мгновенного обновления
+            webViewRef.current.injectJavaScript(`
+              try {
+                if (typeof updateCoords === 'function') {
+                  updateCoords(${newX}, ${newY});
+                }
+              } catch(e) {
+                console.log('Error updating coords:', e);
+              }
+              true;
+            `);
+          }
+        }
+      },
     }));
 
     // Конвертация локального файла в base64
@@ -43,67 +63,51 @@ const Magnifier = forwardRef(
       prepareSrc();
     }, [imageUri]);
 
-    // Плавное обновление координат через requestAnimationFrame
-    useEffect(() => {
-      targetCoords.current = { x, y };
-    }, [x, y]);
-
-    // Запуск анимации когда WebView готов
-    useEffect(() => {
-      if (!isWebViewReady.current || !src) return;
-
-      const updateCoords = () => {
-        if (webViewRef.current && isWebViewReady.current) {
-          webViewRef.current.postMessage(JSON.stringify({ 
-            type: "coords", 
-            x: targetCoords.current.x, 
-            y: targetCoords.current.y 
-          }));
-        }
-        animationId.current = requestAnimationFrame(updateCoords);
-      };
-      
-      animationId.current = requestAnimationFrame(updateCoords);
-      
-      return () => {
-        if (animationId.current) {
-          cancelAnimationFrame(animationId.current);
-          animationId.current = null;
-        }
-      };
-    }, [src]);
-
     if (!src) return null;
 
     const html = `
+      <!DOCTYPE html>
       <html>
         <head>
-          <meta name="viewport" content="initial-scale=1.0, maximum-scale=1.0">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
           <style>
-            html,body{margin:0;padding:0;background:transparent;overflow:hidden;}
-            canvas{display:block;}
+            html, body {
+              margin: 0;
+              padding: 0;
+              background: transparent;
+              overflow: hidden;
+              width: 100%;
+              height: 100%;
+            }
+            canvas {
+              display: block;
+              width: 100%;
+              height: 100%;
+            }
           </style>
         </head>
         <body>
-          <canvas id="canvas" width="${size}" height="${size}"></canvas>
+          <canvas id="canvas"></canvas>
           <script>
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext('2d');
             const size = ${size};
             const zoom = ${zoom};
-            const cx = Math.floor(size/2);
-            const cy = Math.floor(size/2);
+            
+            canvas.width = size;
+            canvas.height = size;
+
+            const cx = Math.floor(size / 2);
+            const cy = Math.floor(size / 2);
 
             const img = new Image();
             img.crossOrigin = "Anonymous";
-            img.src = ${JSON.stringify(src)};
+            img.src = "${src}";
 
-            const canvas = document.getElementById('canvas');
-            const ctx = canvas.getContext('2d');
-
-            let targetX = ${x};
-            let targetY = ${y};
+            let targetX = ${currentCoords.x};
+            let targetY = ${currentCoords.y};
             let imgW = 0, imgH = 0;
             let isImageLoaded = false;
-            let animationId = null;
 
             function drawAt(x, y) {
               if (!isImageLoaded) return;
@@ -119,12 +123,10 @@ const Magnifier = forwardRef(
               sy = Math.max(0, Math.min(imgH - srcH, sy));
 
               // Отключаем сглаживание для четкого пиксельного увеличения
-              if (ctx.imageSmoothingEnabled !== undefined) {
-                ctx.imageSmoothingEnabled = false;
-                ctx.mozImageSmoothingEnabled = false;
-                ctx.webkitImageSmoothingEnabled = false;
-                ctx.msImageSmoothingEnabled = false;
-              }
+              ctx.imageSmoothingEnabled = false;
+              ctx.mozImageSmoothingEnabled = false;
+              ctx.webkitImageSmoothingEnabled = false;
+              ctx.msImageSmoothingEnabled = false;
 
               ctx.clearRect(0, 0, size, size);
               ctx.drawImage(img, sx, sy, srcW, srcH, 0, 0, size, size);
@@ -133,54 +135,37 @@ const Magnifier = forwardRef(
               try {
                 const p = ctx.getImageData(cx, cy, 1, 1).data;
                 const r = p[0], g = p[1], b = p[2], a = p[3];
-                const hex = "#" + ((1<<24) + (r<<16) + (g<<8) + b).toString(16).slice(1);
-                window.ReactNativeWebView.postMessage(JSON.stringify({ hex, r, g, b, a }));
+                const hex = "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+                
+                // Отправляем цвет обратно в React Native
+                if (window.ReactNativeWebView) {
+                  window.ReactNativeWebView.postMessage(JSON.stringify({ 
+                    type: "color", 
+                    hex: hex
+                  }));
+                }
               } catch(e) {
-                // Игнорируем ошибки получения пикселя
+                console.log('Error getting pixel color:', e);
               }
             }
 
-            // Плавная анимация через requestAnimationFrame
-            function animate() {
+            function updateCoords(x, y) {
+              targetX = Math.max(0, Math.min(imgW, x));
+              targetY = Math.max(0, Math.min(imgH, y));
               drawAt(targetX, targetY);
-              animationId = requestAnimationFrame(animate);
             }
 
-            function stopAnimation() {
-              if (animationId) {
-                cancelAnimationFrame(animationId);
-                animationId = null;
-              }
-            }
-
-            img.onload = () => {
-              imgW = img.naturalWidth || img.width;
-              imgH = img.naturalHeight || img.height;
+            img.onload = function() {
+              imgW = img.naturalWidth;
+              imgH = img.naturalHeight;
               isImageLoaded = true;
-              
-              // Запускаем анимацию после загрузки изображения
-              animate();
-              
-              // Сообщаем React, что WebView готов
-              window.ReactNativeWebView.postMessage(JSON.stringify({ type: "ready" }));
+              drawAt(targetX, targetY);
             };
 
-            // Обработка сообщений из React Native
-            document.addEventListener("message", (e) => {
-              try {
-                const data = JSON.parse(e.data);
-                if (data.type === "coords") {
-                  // Плавно обновляем целевые координаты
-                  targetX = data.x;
-                  targetY = data.y;
-                }
-              } catch(err) {
-                // Игнорируем ошибки парсинга
-              }
-            });
-
-            // Останавливаем анимацию при уходе со страницы
-            window.addEventListener('beforeunload', stopAnimation);
+            // Глобальная функция для вызова из React Native
+            window.updateCoords = function(x, y) {
+              updateCoords(x, y);
+            };
           </script>
         </body>
       </html>
@@ -192,35 +177,27 @@ const Magnifier = forwardRef(
           ref={webViewRef}
           originWhitelist={["*"]}
           source={{ html }}
-          javaScriptEnabled
+          javaScriptEnabled={true}
           scrollEnabled={false}
-          style={{ flex: 1, backgroundColor: "transparent" }}
+          style={{ 
+            flex: 1, 
+            backgroundColor: "transparent",
+            borderRadius: size / 2 
+          }}
           onMessage={(event) => {
             try {
               const data = JSON.parse(event.nativeEvent.data);
-              
-              if (data.type === "ready") {
-                isWebViewReady.current = true;
-                return;
-              }
-              
-              if (data && data.hex) {
+              if (data && data.type === "color" && data.hex) {
                 lastColor.current = data.hex;
-                if (typeof onColorPicked === "function") onColorPicked(data.hex);
+                if (typeof onColorPicked === "function") {
+                  onColorPicked(data.hex);
+                }
               }
             } catch (e) {
-              // Игнорируем ошибки парсинга
+              console.error("Error parsing color data:", e);
             }
           }}
-          onLoadStart={() => {
-            isWebViewReady.current = false;
-          }}
-          onLoadEnd={() => {
-            // Дополнительная проверка готовности
-            setTimeout(() => {
-              isWebViewReady.current = true;
-            }, 100);
-          }}
+          onError={(error) => console.error('WebView error:', error)}
         />
         <View style={styles.centerDot} pointerEvents="none" />
       </View>
@@ -231,10 +208,15 @@ const Magnifier = forwardRef(
 const styles = StyleSheet.create({
   outer: {
     overflow: "hidden",
-    borderWidth: 2,
+    borderWidth: 3,
     borderColor: "#16DBBE",
     zIndex: 1000,
     backgroundColor: "transparent",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 8,
   },
   centerDot: {
     position: "absolute",
@@ -247,6 +229,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "white",
     transform: [{ translateX: -3 }, { translateY: -3 }],
+    zIndex: 1001,
   },
 });
 

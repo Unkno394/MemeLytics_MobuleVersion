@@ -21,7 +21,7 @@ import { fontList } from '../src/assets/fonts/fonts';
 
 const { width, height } = Dimensions.get("window");
 
-const TextEditModal = ({ visible, textBlock, onClose, onChange }) => {
+const TextEditModal = ({ visible, text, onClose, onSave, onDelete }) => {
   const [localFontSize, setLocalFontSize] = useState(28);
   const [localText, setLocalText] = useState("");
   const [localColor, setLocalColor] = useState("#ffffff");
@@ -34,7 +34,6 @@ const TextEditModal = ({ visible, textBlock, onClose, onChange }) => {
   const [sliderLayout, setSliderLayout] = useState({ y: 0, height: 0 });
   const insets = useSafeAreaInsets();
 
-  // Используем шрифты из общего файла
   const fonts = fontList;
 
   const textColors = [
@@ -47,15 +46,15 @@ const TextEditModal = ({ visible, textBlock, onClose, onChange }) => {
 
   // Инициализация при открытии
   useEffect(() => {
-    if (visible && textBlock) {
-      setLocalText(textBlock.text === "Новый текст" ? "" : textBlock.text || "");
-      setLocalFontSize(textBlock.fontSize || 28);
-      setLocalColor(textBlock.color || "#ffffff");
-      setLocalFontFamily(textBlock.fontFamily || "Roboto");
-      setHasBackground(textBlock.background || false);
-      setBackgroundColor(textBlock.backgroundColor || "#ffffff");
+    if (visible && text) {
+      setLocalText(text.text === "Новый текст" ? "" : text.text || "");
+      setLocalFontSize(text.fontSize || 28);
+      setLocalColor(text.color || "#ffffff");
+      setLocalFontFamily(text.fontFamily || "Roboto");
+      setHasBackground(text.background || false);
+      setBackgroundColor(text.backgroundColor || "#ffffff");
     }
-  }, [visible, textBlock]);
+  }, [visible, text]);
 
   // Слушатель клавиатуры
   useEffect(() => {
@@ -67,24 +66,32 @@ const TextEditModal = ({ visible, textBlock, onClose, onChange }) => {
     };
   }, []);
 
-  const handleClose = () => {
-    if (!localText.trim()) {
-      onClose?.();
-      return;
-    }
-    onChange?.({
-      ...textBlock,
-      text: localText,
+  const handleSave = () => {
+    if (!text) return;
+    
+    const updatedText = {
+      ...text,
+      text: localText.trim() || "Текст",
       fontSize: localFontSize,
       color: localColor,
       fontFamily: localFontFamily,
       background: hasBackground,
       backgroundColor
-    });
+    };
+    
+    onSave?.(updatedText);
     onClose?.();
   };
-  
 
+  const handleDelete = () => {
+    onDelete?.();
+    onClose?.();
+  };
+
+  const handleClose = () => {
+    handleSave();
+  };
+  
   // Слайдер размера шрифта
   const handleSliderMove = (pageY) => {
     if (!sliderLayout.height || !sliderLayout.y) return;
@@ -138,7 +145,7 @@ const TextEditModal = ({ visible, textBlock, onClose, onChange }) => {
               </View>
             </View>
 
-            {/* Кнопка закрытия */}
+            {/* Кнопка закрытия (белая галочка) - ПРАВЫЙ ВЕРХНИЙ УГОЛ */}
             <TouchableOpacity style={[styles.closeBtn, { top: insets.top + 20 }]} onPress={handleClose}>
               <Svg width={28} height={28} viewBox="0 0 24 24" fill="none">
                 <Path 
@@ -147,6 +154,18 @@ const TextEditModal = ({ visible, textBlock, onClose, onChange }) => {
                 />
               </Svg>
             </TouchableOpacity>
+
+            {/* Кнопка удаления (корзина) - ЛЕВЫЙ ВЕРХНИЙ УГОЛ */}
+            {text && (
+              <TouchableOpacity style={[styles.deleteBtn, { top: insets.top + 20 }]} onPress={handleDelete}>
+                <Svg width={28} height={28} viewBox="0 0 24 24" fill="none">
+                  <Path 
+                    d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"
+                    fill="#ff4444"
+                  />
+                </Svg>
+              </TouchableOpacity>
+            )}
 
             {/* Поле ввода текста */}
             <View style={styles.previewWrapper}>
@@ -174,6 +193,7 @@ const TextEditModal = ({ visible, textBlock, onClose, onChange }) => {
                   placeholderTextColor="#ccc"
                   multiline
                   textAlignVertical="center"
+                  autoFocus
                 />
               </View>
             </View>
@@ -320,6 +340,17 @@ const styles = StyleSheet.create({
   closeBtn: {
     position: "absolute",
     right: 20,
+    backgroundColor: "rgba(0,0,0,0.3)",
+    borderRadius: 20,
+    width: 40,
+    height: 40,
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 10,
+  },
+  deleteBtn: {
+    position: "absolute",
+    left: 20, // ПРИЖАТА К ЛЕВОЙ СТОРОНЕ
     backgroundColor: "rgba(0,0,0,0.3)",
     borderRadius: 20,
     width: 40,

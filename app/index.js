@@ -1,9 +1,12 @@
 // SplashScreen.js
-import React, { useState, useEffect } from "react";
-import { View, Text, StyleSheet } from "react-native";
+import React, { useState, useEffect, useRef } from "react";
+import { View, Text, StyleSheet, Animated } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import Icon from "../assets/images/icon.svg";
+import Icon from "../assets/images/IconComponent";
+
+// Создаём анимированную версию SVG
+const AnimatedIcon = Animated.createAnimatedComponent(Icon);
 
 const SplashScreen = () => {
   const router = useRouter();
@@ -11,7 +14,18 @@ const SplashScreen = () => {
   const [displayedText, setDisplayedText] = useState("");
   const typingInterval = 200;
 
+  // Ref для анимации opacity
+  const iconOpacity = useRef(new Animated.Value(0)).current;
+
   useEffect(() => {
+    // Анимация появления иконки
+    Animated.timing(iconOpacity, {
+      toValue: 1,
+      duration: 1000,
+      useNativeDriver: true,
+    }).start();
+
+    // Тайпинг-анимация текста
     const delayTimer = setTimeout(() => {
       let index = 0;
       const typingTimer = setInterval(() => {
@@ -20,17 +34,15 @@ const SplashScreen = () => {
           setDisplayedText(fullText.slice(0, index));
         } else {
           clearInterval(typingTimer);
-          // Завершаем сплеш через 500ms после окончания печати
+          // Переход на главный экран через 500ms
           setTimeout(() => {
             router.replace("/(tabs)");
           }, 500);
         }
       }, typingInterval);
     }, 1500);
-    
-    return () => {
-      clearTimeout(delayTimer);
-    };
+
+    return () => clearTimeout(delayTimer);
   }, []);
 
   return (
@@ -41,7 +53,11 @@ const SplashScreen = () => {
       style={styles.container}
     >
       <View style={styles.content}>
-        <Icon width={238} height={238} style={styles.icon} />
+        <AnimatedIcon
+          width={238}
+          height={238}
+          style={[styles.icon, { opacity: iconOpacity }]}
+        />
         <Text style={styles.text}>{displayedText}</Text>
       </View>
     </LinearGradient>
@@ -59,7 +75,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   icon: {
-    marginBottom: 30, // отступ между иконкой и текстом
+    marginBottom: 30, // Отступ между иконкой и текстом
   },
   text: {
     fontSize: 48,

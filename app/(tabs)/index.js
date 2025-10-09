@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useContext } from "react";
+import React, { useState, useRef, useEffect, useContext, useMemo, useCallback } from "react";
 import {
   View,
   StyleSheet,
@@ -30,7 +30,6 @@ const SearchIcon = ({ color = "#000" }) => (
   </Svg>
 );
 
-// CubeIcon с градиентной заливкой для неактивного состояния
 const CubeIcon = ({ active = false }) => {
   if (active) {
     return (
@@ -71,34 +70,144 @@ const AccountIcon = ({ color = "#000" }) => (
   </Svg>
 );
 
+// ------------------- TabItem Component -------------------
+const TabItem = React.memo(({ 
+  tab, 
+  index, 
+  isActive, 
+  isDark, 
+  theme, 
+  onPress, 
+  circleScales, 
+  iconTranslates, 
+  textOpacities, 
+  textTranslates,
+  translateX 
+}) => {
+  const { id, icon: IconComponent, label } = tab;
+  const isRandom = id === "random";
+
+  const activeOpacity = translateX.interpolate({
+    inputRange: [(index - 0.36) * STEP, index * STEP, (index + 0.36) * STEP],
+    outputRange: [0, 1, 0],
+    extrapolate: "clamp",
+  });
+
+  const styles = useMemo(() => createTabItemStyles(isDark), [isDark]);
+
+  return (
+    <TouchableOpacity style={styles.navItem} onPress={() => onPress(id)} activeOpacity={0.8}>
+      <View style={styles.navLink}>
+        <Animated.View style={[styles.iconWrapper, { transform: [{ translateY: iconTranslates[index] }] }]}>
+          {isRandom ? <CubeIcon active={isActive} /> : <IconComponent color={theme.inactiveIcon} />}
+          {!isRandom && (
+            <Animated.View 
+              pointerEvents="none" 
+              style={{ 
+                position: "absolute", 
+                left: 0, 
+                right: 0, 
+                top: 0, 
+                bottom: 0, 
+                justifyContent: "center", 
+                alignItems: "center", 
+                opacity: activeOpacity 
+              }}
+            >
+              <IconComponent color={theme.activeIcon} />
+            </Animated.View>
+          )}
+        </Animated.View>
+
+        <Animated.Text 
+          style={[
+            styles.navText, 
+            { 
+              opacity: textOpacities[index], 
+              transform: [{ translateY: textTranslates[index] }], 
+              color: isDark ? "#FFFFFF" : "#1B1F33" 
+            }
+          ]}
+        >
+          {label}
+        </Animated.Text>
+
+        <Animated.View 
+          pointerEvents="none" 
+          style={[
+            styles.circleWrapper, 
+            { 
+              transform: [{ scale: circleScales[index] }], 
+              opacity: circleScales[index] 
+            }
+          ]}
+        >
+          <LinearGradient 
+            colors={theme.indicatorGradient} 
+            start={{ x: 0.1, y: 0 }} 
+            end={{ x: 0.9, y: 1 }} 
+            style={styles.circleGradient} 
+          />
+          <Animated.View 
+            pointerEvents="none" 
+            style={{ 
+              position: "absolute", 
+              justifyContent: "center", 
+              alignItems: "center", 
+              opacity: circleScales[index] 
+            }}
+          >
+            {isRandom ? <CubeIcon active={true} /> : <IconComponent color={"#000"} />}
+          </Animated.View>
+          <View 
+            style={[
+              styles.circleBorder, 
+              { borderColor: isDark ? "#0F111E" : "#FFFFFF" }
+            ]} 
+            pointerEvents="none" 
+          />
+        </Animated.View>
+      </View>
+    </TouchableOpacity>
+  );
+});
+
 // ------------------- MainScreen -------------------
 const MainScreen = () => {
   const params = useLocalSearchParams();
-  const { isDark } = useContext(ThemeContext);
+  const themeContext = useContext(ThemeContext);
+  const isDark = useMemo(() => themeContext?.isDark ?? false, [themeContext]);
 
-  const tabs = [
-    { id: "home", icon: HomeIcon, label: "Главная" },
-    { id: "search", icon: SearchIcon, label: "Поиск" },
-    { id: "random", icon: CubeIcon, label: "Создать" },
-    { id: "messenger", icon: MessageIcon, label: "Чаты" },
-    { id: "profile", icon: AccountIcon, label: "Профиль" },
-  ];
+  const tabs = useMemo(
+    () => [
+      { id: "home", icon: HomeIcon, label: "Главная" },
+      { id: "search", icon: SearchIcon, label: "Поиск" },
+      { id: "random", icon: CubeIcon, label: "Создать" },
+      { id: "messenger", icon: MessageIcon, label: "Чаты" },
+      { id: "profile", icon: AccountIcon, label: "Профиль" },
+    ],
+    []
+  );
 
-  const theme = isDark
-    ? {
-        background: "#0F111E",
-        navBackground: ["#1A1B30", "#2A2B42"],
-        indicatorGradient: ["#00DEE8", "#77EE5F"],
-        activeIcon: "#FFFFFF",
-        inactiveIcon: "#1FD3B9",
-      }
-    : {
-        background: "#EAF0FF",
-        navBackground: ["#FFFFFF", "#F8FAFF"],
-        indicatorGradient: ["#00BFA6", "#5CE1E6"],
-        activeIcon: "#1FD3B9",
-        inactiveIcon: "#7C8599",
-      };
+  const theme = useMemo(
+    () =>
+      isDark
+        ? {
+            background: "#0F111E",
+            navBackground: ["#1A1B30", "#2A2B42"],
+            indicatorGradient: ["#00DEE8", "#77EE5F"],
+            activeIcon: "#FFFFFF",
+            inactiveIcon: "#1FD3B9",
+          }
+        : {
+            background: "#EAF0FF",
+            navBackground: ["#FFFFFF", "#F8FAFF"],
+            indicatorGradient: ["#00BFA6", "#5CE1E6"],
+            activeIcon: "#1FD3B9",
+            inactiveIcon: "#7C8599",
+          },
+    [isDark]
+  );
 
   const NAVIGATION_DELAY = 80;
   const initialActive = "home";
@@ -106,7 +215,9 @@ const MainScreen = () => {
   const [alertVisible, setAlertVisible] = useState(false);
   const [alertConfig, setAlertConfig] = useState({ title: "", message: "" });
 
-  const translateX = useRef(new Animated.Value(tabs.findIndex((t) => t.id === initialActive) * STEP)).current;
+  const initialIndex = useMemo(() => tabs.findIndex((t) => t.id === initialActive), [tabs]);
+  
+  const translateX = useRef(new Animated.Value(initialIndex * STEP)).current;
   const circleScales = useRef(tabs.map((t) => new Animated.Value(t.id === initialActive ? 1 : 0))).current;
   const iconTranslates = useRef(tabs.map((t) => new Animated.Value(t.id === initialActive ? -32 : 0))).current;
   const textOpacities = useRef(tabs.map((t) => new Animated.Value(t.id === initialActive ? 1 : 0))).current;
@@ -133,7 +244,7 @@ const MainScreen = () => {
         Animated.spring(textTranslates[i], { toValue: isActive ? 10 : 20, useNativeDriver: true }),
       ]).start();
     });
-  }, [activeTab]);
+  }, [activeTab, tabs]);
 
   useEffect(() => {
     if (params.showSuccessAlert === "true") {
@@ -143,7 +254,7 @@ const MainScreen = () => {
     }
   }, [params]);
 
-  const navigateTo = (tabId) => {
+  const navigateTo = useCallback((tabId) => {
     if (navTimeoutRef.current) clearTimeout(navTimeoutRef.current);
 
     const navigate = () => {
@@ -163,6 +274,8 @@ const MainScreen = () => {
         case "profile":
           router.push("/profile");
           break;
+        default:
+          break;
       }
     };
 
@@ -171,143 +284,231 @@ const MainScreen = () => {
     } else {
       navigate();
     }
-  };
+  }, []);
 
-  useEffect(() => () => navTimeoutRef.current && clearTimeout(navTimeoutRef.current), []);
+  useEffect(() => {
+    return () => {
+      if (navTimeoutRef.current) {
+        clearTimeout(navTimeoutRef.current);
+      }
+    };
+  }, []);
 
-  const handleTabPress = (tabId) => {
+  const handleTabPress = useCallback((tabId) => {
     setActiveTab(tabId);
     navigateTo(tabId);
-  };
+  }, [navigateTo]);
 
-  const iconActiveOpacity = (index) =>
-    translateX.interpolate({
-      inputRange: [(index - 0.36) * STEP, index * STEP, (index + 0.36) * STEP],
-      outputRange: [0, 1, 0],
-      extrapolate: "clamp",
+  const memes = useMemo(
+    () =>
+      Array.from({ length: 20 }).map((_, i) => ({
+        uri: `https://picsum.photos/300/${300 + Math.random() * 300}?random=${i}`,
+        id: i.toString(),
+        height: 200 + Math.random() * 200,
+      })),
+    []
+  );
+
+  const renderMasonryGrid = useCallback(() => {
+    const columnWidth = (width - 24) / 2;
+    const columns = [[], []];
+    const columnHeights = [0, 0];
+
+    memes.forEach((meme) => {
+      const shortest = columnHeights[0] <= columnHeights[1] ? 0 : 1;
+      columns[shortest].push(meme);
+      columnHeights[shortest] += meme.height;
     });
 
-  const memes = Array.from({ length: 20 }).map((_, i) => ({
-    uri: `https://picsum.photos/300/${300 + Math.random() * 300}?random=${i}`,
-    id: i.toString(),
-    height: 200 + Math.random() * 200,
-  }));
+    const styles = createMasonryStyles(isDark);
 
-  const renderMasonryGrid = () => {
-  const columnWidth = (width - 24) / 2;
-  const columns = [[], []];
-  const columnHeights = [0, 0];
+    return (
+      <View style={styles.masonryContainer}>
+        {columns.map((column, colIndex) => (
+          <View key={colIndex} style={styles.column}>
+            {column.map((meme) => (
+              <TouchableOpacity 
+                key={meme.id} 
+                style={[styles.memeItem, { width: columnWidth }]}
+                onPress={() => router.push({
+                  pathname: '/post-detail',
+                  params: {
+                    postId: meme.id,
+                    imageUri: meme.uri,
+                    postType: 'feedPost'
+                  }
+                })}
+              >
+                <Image
+                  source={{ uri: meme.uri }}
+                  style={[styles.memeImage, { height: meme.height }]}
+                  resizeMode="cover"
+                />
+              </TouchableOpacity>
+            ))}
+          </View>
+        ))}
+      </View>
+    );
+  }, [memes, isDark]);
 
-  memes.forEach((meme) => {
-    const shortest = columnHeights[0] <= columnHeights[1] ? 0 : 1;
-    columns[shortest].push(meme);
-    columnHeights[shortest] += meme.height;
-  });
-
-  return (
-    <View style={styles.masonryContainer}>
-      {columns.map((column, colIndex) => (
-        <View key={colIndex} style={styles.column}>
-          {column.map((meme) => (
-            <TouchableOpacity 
-              key={meme.id} 
-              style={[styles.memeItem, { width: columnWidth }]}
-              onPress={() => router.push({
-                pathname: '/post-detail',
-                params: {
-                  postId: meme.id,
-                  imageUri: meme.uri,
-                  postType: 'feedPost' // Изменил на feedPost для ленты
-                }
-              })}
-            >
-              <Image
-                source={{ uri: meme.uri }}
-                style={[styles.memeImage, { height: meme.height }]}
-                resizeMode="cover"
-              />
-            </TouchableOpacity>
-          ))}
-        </View>
-      ))}
-    </View>
-  );
-};
-  const styles = StyleSheet.create({
-    container: { flex: 1, backgroundColor: theme.background },
-    scrollView: { flex: 1 },
-    scrollViewContent: { paddingBottom: 100 },
-    masonryContainer: { flexDirection: "row", paddingHorizontal: 8, paddingTop: 8 },
-    column: { flex: 1, marginHorizontal: 4 },
-    memeItem: { marginBottom: 8, borderRadius: 10, overflow: "hidden", backgroundColor: isDark ? "#1A1B30" : "#FFFFFF", shadowColor: "#000", shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 3 },
-    memeImage: { width: "100%", borderRadius: 10 },
-    navigationWrapper: { position: "absolute", bottom: 0, left: 0, right: 0, alignItems: "center" },
-    navigation: { width, height: 70, borderRadius: 10, overflow: "visible" },
-    navigationGradient: { width: "100%", height: "100%", borderRadius: 10, flexDirection: "row", justifyContent: "center", alignItems: "center" },
-    navItem: { width: STEP, height: 70, zIndex: 1 },
-    navLink: { width: "100%", height: "100%", justifyContent: "center", alignItems: "center", position: "relative" },
-    iconWrapper: { position: "relative", alignItems: "center", justifyContent: "center" },
-    navText: { position: "absolute", fontWeight: "400", fontSize: 10, letterSpacing: 0.5 },
-    circleWrapper: { position: "absolute", top: -25, left: 10, width: 50, height: 50, borderRadius: 25, justifyContent: "center", alignItems: "center", zIndex: 3, overflow: "hidden" },
-    circleGradient: { width: "100%", height: "100%", borderRadius: 25 },
-    circleBorder: { position: "absolute", width: "100%", height: "100%", borderRadius: 25, borderWidth: 1.8, backgroundColor: "transparent" },
-    indicator: { left: 5, position: "absolute", top: -35, width: 70, height: 70, borderRadius: 35, borderWidth: 6, borderColor: isDark ? "#0F111E" : "#EAF0FF", justifyContent: "center", alignItems: "center" },
-    indicatorGradient: { width: "100%", height: "100%", borderRadius: 35, justifyContent: "center", alignItems: "center" },
-  });
+  const styles = useMemo(() => createStyles(theme, isDark), [theme, isDark]);
 
   return (
     <View style={styles.container}>
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollViewContent} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.scrollView} 
+        contentContainerStyle={styles.scrollViewContent} 
+        showsVerticalScrollIndicator={false}
+      >
         {renderMasonryGrid()}
       </ScrollView>
 
       <View style={styles.navigationWrapper}>
         <View style={styles.navigation}>
-          <LinearGradient colors={theme.navBackground} start={{ x: 1, y: 0 }} end={{ x: 0, y: 0 }} style={styles.navigationGradient}>
-            {tabs.map((tab, index) => {
-              const isRandom = tab.id === "random";
-              const IconComponent = tab.icon;
-
-              const activeOpacity = iconActiveOpacity(index);
-
-              return (
-                <TouchableOpacity key={tab.id} style={styles.navItem} onPress={() => handleTabPress(tab.id)} activeOpacity={0.8}>
-                  <View style={styles.navLink}>
-                    <Animated.View style={[styles.iconWrapper, { transform: [{ translateY: iconTranslates[index] }] }]}>
-                      {isRandom ? <CubeIcon active={tab.id === activeTab} /> : <IconComponent color={theme.inactiveIcon} />}
-                      {!isRandom && (
-                        <Animated.View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0, justifyContent: "center", alignItems: "center", opacity: activeOpacity }}>
-                          <IconComponent color={theme.activeIcon} />
-                        </Animated.View>
-                      )}
-                    </Animated.View>
-
-                    <Animated.Text style={[styles.navText, { opacity: textOpacities[index], transform: [{ translateY: textTranslates[index] }], color: isDark ? "#FFFFFF" : "#1B1F33" }]}>
-                      {tab.label}
-                    </Animated.Text>
-
-                    <Animated.View pointerEvents="none" style={[styles.circleWrapper, { transform: [{ scale: circleScales[index] }], opacity: circleScales[index] }]}>
-                      <LinearGradient colors={theme.indicatorGradient} start={{ x: 0.1, y: 0 }} end={{ x: 0.9, y: 1 }} style={styles.circleGradient} />
-                      <Animated.View pointerEvents="none" style={{ position: "absolute", justifyContent: "center", alignItems: "center", opacity: circleScales[index] }}>
-                        {tab.id === "random" ? <CubeIcon active={true} /> : <IconComponent color={"#000"} />}
-                      </Animated.View>
-                      <View style={[styles.circleBorder, { borderColor: isDark ? "#0F111E" : "#FFFFFF" }]} pointerEvents="none" />
-                    </Animated.View>
-                  </View>
-                </TouchableOpacity>
-              );
-            })}
+          <LinearGradient 
+            colors={theme.navBackground} 
+            start={{ x: 1, y: 0 }} 
+            end={{ x: 0, y: 0 }} 
+            style={styles.navigationGradient}
+          >
+            {tabs.map((tab, index) => (
+              <TabItem
+                key={tab.id}
+                tab={tab}
+                index={index}
+                isActive={tab.id === activeTab}
+                isDark={isDark}
+                theme={theme}
+                onPress={handleTabPress}
+                circleScales={circleScales}
+                iconTranslates={iconTranslates}
+                textOpacities={textOpacities}
+                textTranslates={textTranslates}
+                translateX={translateX}
+              />
+            ))}
           </LinearGradient>
 
           <Animated.View style={[styles.indicator, { transform: [{ translateX: translateX }] }]}>
-            <LinearGradient colors={theme.indicatorGradient} start={{ x: 0.5, y: 0 }} end={{ x: 0.4, y: 1.5 }} style={styles.indicatorGradient} />
+            <LinearGradient 
+              colors={theme.indicatorGradient} 
+              start={{ x: 0.5, y: 0 }} 
+              end={{ x: 0.4, y: 1.5 }} 
+              style={styles.indicatorGradient} 
+            />
           </Animated.View>
         </View>
       </View>
 
-      <CustomAlert visible={alertVisible} title={alertConfig.title} message={alertConfig.message} onClose={() => setAlertVisible(false)} />
+      <CustomAlert 
+        visible={alertVisible} 
+        title={alertConfig.title} 
+        message={alertConfig.message} 
+        onClose={() => setAlertVisible(false)} 
+      />
     </View>
   );
 };
+
+// ------------------- StyleSheet Creators -------------------
+const createStyles = (theme, isDark) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: theme.background },
+  scrollView: { flex: 1 },
+  scrollViewContent: { paddingBottom: 100 },
+  navigationWrapper: { position: "absolute", bottom: 0, left: 0, right: 0, alignItems: "center" },
+  navigation: { width, height: 70, borderRadius: 10, overflow: "visible" },
+  navigationGradient: { 
+    width: "100%", 
+    height: "100%", 
+    borderRadius: 10, 
+    flexDirection: "row", 
+    justifyContent: "center", 
+    alignItems: "center" 
+  },
+  indicator: { 
+    left: 5, 
+    position: "absolute", 
+    top: -35, 
+    width: 70, 
+    height: 70, 
+    borderRadius: 35, 
+    borderWidth: 6, 
+    borderColor: isDark ? "#0F111E" : "#EAF0FF", 
+    justifyContent: "center", 
+    alignItems: "center" 
+  },
+  indicatorGradient: { 
+    width: "100%", 
+    height: "100%", 
+    borderRadius: 35, 
+    justifyContent: "center", 
+    alignItems: "center" 
+  },
+});
+
+const createMasonryStyles = (isDark) => StyleSheet.create({
+  masonryContainer: { flexDirection: "row", paddingHorizontal: 8, paddingTop: 8 },
+  column: { flex: 1, marginHorizontal: 4 },
+  memeItem: { 
+    marginBottom: 8, 
+    borderRadius: 10, 
+    overflow: "hidden", 
+    backgroundColor: isDark ? "#1A1B30" : "#FFFFFF", 
+    shadowColor: "#000", 
+    shadowOffset: { width: 0, height: 2 }, 
+    shadowOpacity: 0.1, 
+    shadowRadius: 4, 
+    elevation: 3 
+  },
+  memeImage: { width: "100%", borderRadius: 10 },
+});
+
+const createTabItemStyles = (isDark) => StyleSheet.create({
+  navItem: { width: STEP, height: 70, zIndex: 1 },
+  navLink: { 
+    width: "100%", 
+    height: "100%", 
+    justifyContent: "center", 
+    alignItems: "center", 
+    position: "relative" 
+  },
+  iconWrapper: { 
+    position: "relative", 
+    alignItems: "center", 
+    justifyContent: "center" 
+  },
+  navText: { 
+    position: "absolute", 
+    fontWeight: "400", 
+    fontSize: 10, 
+    letterSpacing: 0.5 
+  },
+  circleWrapper: { 
+    position: "absolute", 
+    top: -25, 
+    left: 10, 
+    width: 50, 
+    height: 50, 
+    borderRadius: 25, 
+    justifyContent: "center", 
+    alignItems: "center", 
+    zIndex: 3, 
+    overflow: "hidden" 
+  },
+  circleGradient: { 
+    width: "100%", 
+    height: "100%", 
+    borderRadius: 25 
+  },
+  circleBorder: { 
+    position: "absolute", 
+    width: "100%", 
+    height: "100%", 
+    borderRadius: 25, 
+    borderWidth: 1.8, 
+    backgroundColor: "transparent" 
+  },
+});
 
 export default MainScreen;

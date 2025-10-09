@@ -7,7 +7,6 @@ export default function CustomLayout() {
   return (
     <SafeAreaProvider>
       <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        {/* Slot рендерит текущий экран */}
         <Slot />
       </SafeAreaView>
     </SafeAreaProvider>
@@ -17,6 +16,6 @@ export default function CustomLayout() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#0F101F", // поменяй на фон твоего экрана
+    backgroundColor: "#0F101F",
   },
 });

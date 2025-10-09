@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'; 
+import React, { useEffect, useState, useContext } from 'react'; 
 import { View, Text, Modal, StyleSheet, Animated, TouchableWithoutFeedback, TouchableOpacity } from 'react-native';
 import { ThemeContext } from '../src/context/ThemeContext';
 
@@ -9,7 +9,8 @@ const CustomAlert = ({
   buttons = [], // Массив кнопок: [{ text: 'OK', onPress: () => {} }]
   onClose 
 }) => {
-  const { isDark } = React.useContext(ThemeContext);
+  const themeContext = useContext(ThemeContext);
+  const isDark = themeContext?.isDark || false; // Добавляем проверку на существование контекста
   
   // Состояние анимации для подъема
   const [fadeAnim] = useState(new Animated.Value(0));
