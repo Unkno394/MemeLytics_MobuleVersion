@@ -67,39 +67,48 @@ const getTwemojiCodePoints = (emoji) => {
 
 const UNSUPPORTED_EMOJIS = new Set(['🫨', '🫷', '🫸', '🩷', '🩵', '🩶', '🫩']);
 
-const Twemoji = memo(({ emoji, size = 20, style }) => {
+const Twemoji = memo(({ emoji, size = 24, style }) => {
+  const [error, setError] = useState(false);
   if (!emoji) return null;
-  if (UNSUPPORTED_EMOJIS.has(emoji)) {
+
+  if (error) {
+    // fallback на системный emoji
     return <Text style={[style, { fontSize: size }]}>{emoji}</Text>;
   }
-  const simpleEmoji = emoji.split('\u200D')[0];
+
   try {
-    const codePoints = getTwemojiCodePoints(simpleEmoji);
-    if (!codePoints) return <Text style={[style, { fontSize: size }]}>{emoji}</Text>;
-    const uri = `https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/72x72/${codePoints}.png`;
+    const codePoints = Array.from(emoji)
+      .map(c => c.codePointAt(0).toString(16).toLowerCase())
+      .join('-');
+
+    const uri = `https://cdnjs.cloudflare.com/ajax/libs/twemoji/15.1.0/72x72/${codePoints}.png`;
+
     return (
-      <Image 
-        source={{ uri }} 
+      <Image
+        source={{ uri }}
         style={[{ width: size, height: size }, style]}
-        onError={() => <Text style={[style, { fontSize: size }]}>{emoji}</Text>}
+        onError={() => setError(true)}
       />
     );
-  } catch (error) {
+  } catch {
     return <Text style={[style, { fontSize: size }]}>{emoji}</Text>;
   }
 });
 
-// ===== EmojiText Component =====
+// ===== EmojiText (универсальный) =====
 const EmojiText = memo(({ text, style, numberOfLines }) => {
   if (!text) return null;
-  const emojiRegex = /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1FA70}-\u{1FAFF}]/gu;
+
+  const regex =
+    /(\p{Emoji_Presentation}|\p{Emoji}\uFE0F|\p{Emoji_Modifier_Base}(?:\p{Emoji_Modifier})?|\p{Emoji}(?:\u200D\p{Emoji})+)/gu;
+
   const parts = [];
   let lastIndex = 0;
-  let match;
 
-  while ((match = emojiRegex.exec(text)) !== null) {
+  for (const match of text.matchAll(regex)) {
     const emoji = match[0];
     const index = match.index;
+
     if (index > lastIndex) {
       parts.push(
         <Text key={`text-${lastIndex}`} style={style} numberOfLines={numberOfLines}>
@@ -107,16 +116,19 @@ const EmojiText = memo(({ text, style, numberOfLines }) => {
         </Text>
       );
     }
+
     parts.push(
-      <Twemoji 
+      <Twemoji
         key={`emoji-${index}`}
-        emoji={emoji} 
+        emoji={emoji}
         size={style?.fontSize || 16}
         style={{ marginHorizontal: 1 }}
       />
     );
+
     lastIndex = index + emoji.length;
   }
+
   if (lastIndex < text.length) {
     parts.push(
       <Text key={`text-${lastIndex}`} style={style} numberOfLines={numberOfLines}>
@@ -124,15 +136,14 @@ const EmojiText = memo(({ text, style, numberOfLines }) => {
       </Text>
     );
   }
-  if (parts.length === 0) {
-    return <Text style={style} numberOfLines={numberOfLines}>{text}</Text>;
-  }
+
   return (
     <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center" }}>
       {parts}
     </View>
   );
 });
+
 
 // ===== Emoji Input Component =====
 const EmojiTextInput = memo(({ value, onChangeText, placeholder, style, theme }) => {
@@ -347,24 +358,20 @@ const CommentsScreen = () => {
 
   // Emoji categories (такие же как в чате)
   const emojiCategories = useMemo(() => {
-    const filteredEmojis = Object.entries(emojis).filter(([emoji]) => {
-      return !emoji.includes('\u200D') && !UNSUPPORTED_EMOJIS.has(emoji);
-    });
+  const grouped = Object.entries(emojis).reduce((acc, [emoji, info]) => {
+    const { group } = info;
+    if (!acc[group]) acc[group] = [];
+    acc[group].push(emoji);
+    return acc;
+  }, {});
 
-    const grouped = filteredEmojis.reduce((acc, [emoji, info]) => {
-      const { group } = info;
-      if (!acc[group]) acc[group] = [];
-      if (acc[group].length < 50) acc[group].push(emoji);
-      return acc;
-    }, {});
-
-    return Object.entries(grouped).map(([title, data]) => ({ 
-      title, 
-      data: Array.from({ length: Math.ceil(data.length / 7) }, (_, i) =>
-        data.slice(i * 7, i * 7 + 7)
-      )
-    }));
-  }, []);
+  return Object.entries(grouped).map(([title, data]) => ({
+    title,
+    data: Array.from({ length: Math.ceil(data.length / 7) }, (_, i) =>
+      data.slice(i * 7, i * 7 + 7)
+    ),
+  }));
+}, []);
 
   // Анимация emoji панели
   useEffect(() => {

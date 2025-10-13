@@ -48,156 +48,107 @@ const StickerIcon = ({ color = "#16DBBE" }) => (
   </Svg>
 );
 
-// ===== Утилиты для Twemoji =====
-const getTwemojiCodePoints = (emoji) => {
-  const codePoints = [];
-  
-  for (let i = 0; i < emoji.length; i++) {
-    const code = emoji.codePointAt(i);
-    
-    // Пропускаем ZWJ (Zero Width Joiner) и вариационные селекторы
-    if (code === 0x200D || code === 0xFE0F) continue;
-    
-    // Пропускаем суррогатные пары
-    if (code >= 0xD800 && code <= 0xDFFF) continue;
-    
-    codePoints.push(code.toString(16).toLowerCase());
-    
-    // Если это суррогатная пара, пропускаем следующий символ
-    if (code > 0xFFFF) {
-      i++;
-    }
-  }
-  
-  return codePoints.join('-');
-};
-
-// Список эмодзи которые не поддерживаются Twemoji (очень новые)
+// ===== Утилиты для Twemoji (простая) =====
 const UNSUPPORTED_EMOJIS = new Set([
   '🫨', '🫷', '🫸', '🩷', '🩵', '🩶', '🫩'
 ]);
 
-// ===== Twemoji Image Component =====
+// Преобразуем строку в codepoints для twemoji URL (попытка)
+const makeCodePoints = (emojiStr) => {
+  try {
+    const pts = Array.from(emojiStr)
+      .map(c => c.codePointAt(0).toString(16).toLowerCase())
+      .join('-');
+    return pts;
+  } catch {
+    return null;
+  }
+};
+
+// ===== Twemoji Image Component (один раз) =====
 const Twemoji = memo(({ emoji, size = 20, style }) => {
+  const [error, setError] = useState(false);
+
   if (!emoji) return null;
 
-  // Проверяем поддерживается ли эмодзи
-  if (UNSUPPORTED_EMOJIS.has(emoji)) {
+  if (error) {
+    // fallback: показать системный emoji как текст
     return <Text style={[style, { fontSize: size }]}>{emoji}</Text>;
   }
 
-  // Для сложных эмодзи с ZWJ берем только первый компонент
-  const simpleEmoji = emoji.split('\u200D')[0];
-  
-  try {
-    const codePoints = getTwemojiCodePoints(simpleEmoji);
-    
-    if (!codePoints) {
-      return <Text style={[style, { fontSize: size }]}>{emoji}</Text>;
-    }
+  const codePoints = makeCodePoints(emoji);
+  if (!codePoints) return <Text style={[style, { fontSize: size }]}>{emoji}</Text>;
 
-    const uri = `https://cdnjs.cloudflare.com/ajax/libs/twemoji/14.0.2/72x72/${codePoints}.png`;
-
-    return (
-      <Image 
-        source={{ uri }} 
-        style={[
-          { 
-            width: size, 
-            height: size,
-          },
-          style
-        ]}
-        onError={(e) => {
-          return (
-            <Text style={[style, { fontSize: size }]}>{emoji}</Text>
-          );
-        }}
-      />
-    );
-  } catch (error) {
-    return <Text style={[style, { fontSize: size }]}>{emoji}</Text>;
-  }
-});
-
-// ===== EmojiText с Twemoji =====
-const EmojiText = memo(({ text, style }) => {
-  if (!text) return null;
-
-  // Regex для всех типов эмодзи
-  const emojiRegex = /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1FA70}-\u{1FAFF}]/gu;
-  
-  const parts = [];
-  let lastIndex = 0;
-  let match;
-
-  while ((match = emojiRegex.exec(text)) !== null) {
-    const emoji = match[0];
-    const index = match.index;
-
-    // Текст перед эмодзи
-    if (index > lastIndex) {
-      parts.push(
-        <Text key={`text-${lastIndex}`} style={style}>
-          {text.slice(lastIndex, index)}
-        </Text>
-      );
-    }
-
-    // Twemoji для эмодзи
-    parts.push(
-      <Twemoji 
-        key={`emoji-${index}`}
-        emoji={emoji} 
-        size={style?.fontSize || 16}
-        style={{ marginHorizontal: 1 }}
-      />
-    );
-
-    lastIndex = index + emoji.length;
-  }
-
-  // Оставшийся текст
-  if (lastIndex < text.length) {
-    parts.push(
-      <Text key={`text-${lastIndex}`} style={style}>
-        {text.slice(lastIndex)}
-      </Text>
-    );
-  }
-
-  if (parts.length === 0) {
-    return <Text style={style}>{text}</Text>;
-  }
+  const uri = `https://cdnjs.cloudflare.com/ajax/libs/twemoji/15.1.0/72x72/${codePoints}.png`;
 
   return (
-    <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center" }}>
-      {parts}
-    </View>
+    <Image
+      source={{ uri }}
+      style={[{ width: size, height: size }, style]}
+      onError={() => setError(true)}
+    />
   );
 });
 
-// ===== Emoji List с Twemoji =====
+// ===== Простая компонента для рендера текста с emoji (system fallback) =====
+const EmojiText = memo(({ text, style }) => {
+  if (!text) return null;
+
+  const parts = Array.from(text);
+
+  return (
+    <Text style={[{ flexWrap: "wrap", flexDirection: "row" }, style]}>
+      {parts.map((char, i) => {
+        const isEmoji = /\p{Extended_Pictographic}/u.test(char);
+        if (isEmoji && !UNSUPPORTED_EMOJIS.has(char)) {
+          const codePoints = makeCodePoints(char);
+          const uri = `https://cdnjs.cloudflare.com/ajax/libs/twemoji/15.1.0/72x72/${codePoints}.png`;
+
+          // вычисляем размер относительно текста
+          const fontSize = style?.fontSize || 16;
+          const emojiSize = fontSize * 1.1; // чуть больше для баланса
+
+          return (
+            <Image
+              key={i}
+              source={{ uri }}
+              style={{
+                width: emojiSize,
+                height: emojiSize,
+                marginHorizontal: 1,
+                // ключевая строчка:
+                transform: [{ translateY: fontSize * 0.1 }], // опустить emoji чуть вниз
+              }}
+            />
+          );
+        } else {
+          return <Text key={i} style={style}>{char}</Text>;
+        }
+      })}
+    </Text>
+  );
+});
+
+// ===== Emoji List (компонент) =====
 const EmojiList = memo(({ emojiCategories, theme, onSelect }) => {
   const renderItem = useCallback(({ item }) => (
-    <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-      {item.map((emoji, i) => (
-        <TouchableOpacity
-          key={i}
-          style={{ flex: 1, alignItems: "center", marginVertical: 4 }}
-          onPress={() => onSelect(emoji)}
-        >
+    <View style={{ flexDirection: 'row', justifyContent: 'space-around', marginVertical: 4 }}>
+      {item.map((emoji, idx) => (
+        <TouchableOpacity key={idx} onPress={() => onSelect && onSelect(emoji)} style={{ padding: 6 }}>
           <Twemoji emoji={emoji} size={28} />
         </TouchableOpacity>
       ))}
     </View>
   ), [onSelect]);
 
-  const renderSectionHeader = useCallback(({ section: { title } }) => (
-    <Text style={{color:theme.text, fontWeight:"600", fontSize:14, marginVertical:6}}>
-      {title}
-    </Text>
-  ), [theme.text]);
+  const renderSectionHeader = useCallback(
+    ({ section: { title } }) => (
+      <Text style={{ color: theme.text, fontWeight: '600', fontSize: 14, marginVertical: 6 }}>
+        {title}
+      </Text>
+    ),
+    [theme.text]
+  );
 
   return (
     <SectionList
@@ -209,34 +160,32 @@ const EmojiList = memo(({ emojiCategories, theme, onSelect }) => {
       maxToRenderPerBatch={10}
       windowSize={10}
       removeClippedSubviews
-      contentContainerStyle={{paddingBottom:30}}
+      contentContainerStyle={{ paddingBottom: 30 }}
     />
   );
 });
 
-// ===== Кастомный TextInput с Twemoji =====
+// ===== Кастомный TextInput с отображением emoji-текста =====
 const EmojiTextInput = memo(({ value, onChangeText, placeholder, style, theme }) => {
   return (
     <View style={[styles.textInputContainer, style]}>
-      {/* Всегда отображаем Twemoji */}
       {value ? (
-        <EmojiText 
-          text={value} 
-          style={[
-            styles.textInputContent,
-            { 
-              color: theme.inputText, // Текст белый в темной теме
-            }
-          ]} 
-        />
+<EmojiText
+  text={value}
+  style={[
+    styles.textInputContent,
+    {
+      color: theme.inputText,
+    },
+  ]}
+/>
+
       ) : (
-        // Показываем placeholder когда пусто
         <Text style={[styles.textInputContent, { color: theme.inputPlaceholder }]}>
           {placeholder}
         </Text>
       )}
-      
-      {/* Прозрачный TextInput для ввода */}
+
       <TextInput
         style={styles.hiddenInput}
         value={value}
@@ -287,31 +236,29 @@ const ChatScreen = () => {
     }
   ];
 
+  // Собираем категории эмодзи (без хуков в верхнем уровне — используем useMemo внутри компонента)
   const emojiCategories = useMemo(() => {
-    // Фильтруем эмодзи которые не работают с Twemoji
-    const filteredEmojis = Object.entries(emojis).filter(([emoji]) => {
-      // Исключаем эмодзи с ZWJ (сложные комбинации) и неподдерживаемые
-      return !emoji.includes('\u200D') && !UNSUPPORTED_EMOJIS.has(emoji);
-    });
+  // Берём все эмодзи из unicode-emoji-json
+  const allEmojis = Object.entries(emojis);
 
-    const grouped = filteredEmojis.reduce((acc, [emoji, info]) => {
-      const { group } = info;
-      if (!acc[group]) acc[group] = [];
-      
-      // Ограничиваем количество эмодзи в группе для производительности
-      if (acc[group].length < 50) {
-        acc[group].push(emoji);
-      }
-      return acc;
-    }, {});
+  // Группируем по категориям (Smileys, Animals, Food и т.д.)
+  const grouped = allEmojis.reduce((acc, [emoji, info]) => {
+    // Исключаем только неподдерживаемые (чтобы не ломались картинки)
+    if (UNSUPPORTED_EMOJIS.has(emoji)) return acc;
+    const { group } = info;
+    if (!acc[group]) acc[group] = [];
+    acc[group].push(emoji);
+    return acc;
+  }, {});
 
-    return Object.entries(grouped).map(([title, data]) => ({ 
-      title, 
-      data: Array.from({ length: Math.ceil(data.length / 7) }, (_, i) =>
-        data.slice(i * 7, i * 7 + 7)
-      )
-    }));
-  }, []);
+  // Разбиваем на строки по 6 эмодзи
+  return Object.entries(grouped).map(([title, data]) => ({
+    title,
+    data: Array.from({ length: Math.ceil(data.length / 6) }, (_, i) =>
+      data.slice(i * 6, i * 6 + 6)
+    ),
+  }));
+}, []);
 
   const gifs = ["🎬 GIF 1", "🎬 GIF 2", "🎬 GIF 3"];
 
@@ -341,12 +288,16 @@ const ChatScreen = () => {
   const scrollToEnd = () => {
     setTimeout(() => {
       if (scrollRef.current && chat?.messages?.length > 0) {
-        scrollRef.current.scrollToLocation({
-          animated: true,
-          sectionIndex: 0,
-          itemIndex: chat.messages.length - 1,
-          viewPosition: 0,
-        });
+        try {
+          scrollRef.current.scrollToLocation({
+            animated: true,
+            sectionIndex: 0,
+            itemIndex: chat.messages.length - 1,
+            viewPosition: 0,
+          });
+        } catch (e) {
+          // ignore scroll errors in some RN versions
+        }
       }
     }, 100);
   };
@@ -394,32 +345,32 @@ const ChatScreen = () => {
         <Text style={[styles.username,{color:theme.text}]}>{chat.name}</Text>
       </View>
 
-      {/* messages */}
-      <SectionList
-        ref={scrollRef}
-        sections={[{ title:"messages", data: chat.messages }]}
-        keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <View style={[styles.messageBubble,{
-            backgroundColor:item.fromMe?theme.bubbleMe:theme.bubbleOther,
-            alignSelf:item.fromMe?"flex-end":"flex-start"
-          }]}>
-            <EmojiText 
-              text={item.text} 
-              style={{
-                color: item.fromMe ? "#000" : theme.text, 
-                fontSize: 16,
-                lineHeight: 20
-              }} 
-            />
-          </View>
-        )}
-        contentContainerStyle={{padding:12,paddingBottom:10}}
-        onContentSizeChange={scrollToEnd}
-        initialNumToRender={10}
-        maxToRenderPerBatch={10}
-        windowSize={10}
+     {/* messages */}
+<SectionList
+  ref={scrollRef}
+  sections={[{ title:"messages", data: chat.messages }]}
+  keyExtractor={(item) => item.id}
+  renderItem={({ item }) => (
+    <View style={[styles.messageBubble,{
+      backgroundColor:item.fromMe?theme.bubbleMe:theme.bubbleOther,
+      alignSelf:item.fromMe?"flex-end":"flex-start"
+    }]}>
+      <EmojiText 
+        text={item.text} 
+        style={{
+          color: item.fromMe ? "#000" : theme.text, 
+          fontSize: 16,
+          lineHeight: 20
+        }} 
       />
+    </View>
+  )}
+  contentContainerStyle={{padding:12,paddingBottom:10}}
+  onContentSizeChange={scrollToEnd}
+  initialNumToRender={10}
+  maxToRenderPerBatch={10}
+  windowSize={10}
+/>
 
       {/* input */}
       <View style={[styles.inputContainer,{

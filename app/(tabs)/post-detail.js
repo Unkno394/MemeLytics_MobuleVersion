@@ -21,16 +21,63 @@ import Svg, { Path } from "react-native-svg";
 import { Feather, MaterialCommunityIcons } from "@expo/vector-icons";
 import * as MediaLibrary from 'expo-media-library';
 import * as FileSystem from 'expo-file-system';
-import { Twemoji, EmojiText } from "../../components/Twemoji";
+import { Twemoji } from "../../components/Twemoji";
 import ActionModal from "../../components/ActionModal";
 import ReportModal from "../../components/ReportModal.js";
 import { modalConfigs } from "../../constants/modalConfigs";
 import CustomAlert from '../../components/CustomAlert';
-
+import { KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard } from "react-native";
 import CoolAvatar from "../../src/assets/cool_avatar.jpg";
+
+
 
 const { width, height } = Dimensions.get("window");
 const STATUS_BAR_HEIGHT = StatusBar.currentHeight || 0;
+
+// === Исправленный EmojiText (чтобы эмодзи были на одной линии с текстом) ===
+const UNSUPPORTED_EMOJIS = new Set(["™️", "©️", "®️"]);
+
+function makeCodePoints(emoji) {
+  return Array.from(emoji)
+    .map(char => char.codePointAt(0).toString(16))
+    .join("-");
+}
+
+const EmojiText = React.memo(({ text, style }) => {
+  if (!text) return null;
+
+  const parts = Array.from(text);
+  const fontSize = style?.fontSize || 16;
+  const emojiSize = fontSize * 1.1; // чуть больше, как системные emoji
+
+  return (
+    <Text style={[style, { flexWrap: "nowrap" }]}>
+      {parts.map((char, i) => {
+        const isEmoji = /\p{Extended_Pictographic}/u.test(char);
+        if (isEmoji && !UNSUPPORTED_EMOJIS.has(char)) {
+          const codePoints = makeCodePoints(char);
+          const uri = `https://cdnjs.cloudflare.com/ajax/libs/twemoji/15.1.0/72x72/${codePoints}.png`;
+          return (
+            <Image
+              key={i}
+              source={{ uri }}
+              style={{
+                width: emojiSize,
+                height: emojiSize,
+                marginHorizontal: 1,
+                alignSelf: "center",
+                transform: [{ translateY: fontSize * 0.08 }],
+              }}
+            />
+          );
+        } else {
+          return <Text key={i} style={style}>{char}</Text>;
+        }
+      })}
+    </Text>
+  );
+});
+
 
 const BackIcon = ({ color = "#16DBBE" }) => (
   <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
@@ -480,6 +527,22 @@ const PostDetail = () => {
       padding: 16,
       width: width * 0.95,
     },
+commentSection: {
+  marginBottom: 10,
+},
+
+popularEmojiRow: {
+  flexDirection: "row",
+  alignItems: "center",
+  paddingVertical: 6,
+  paddingHorizontal: 8,
+  gap: 10,
+},
+
+emojiButton: {
+  padding: 4,
+},
+
     descriptionText: {
       color: theme.text,
       fontSize: 15,
@@ -721,57 +784,88 @@ const PostDetail = () => {
           theme={theme}
         />
 
-        <Modal
-          visible={isShareModalVisible}
-          animationType="slide"
-          transparent={true}
-          onRequestClose={closeShareModal}
-          statusBarTranslucent={true}
-        >
-          <SafeAreaView style={styles.modalOverlay}>
-            <View style={styles.shareModal}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Отправить пост</Text>
-                <TouchableOpacity onPress={closeShareModal}>
-                  <Text style={{ color: '#16DBBE', fontSize: 18, fontWeight: 'bold' }}>✕</Text>
-                </TouchableOpacity>
-              </View>
+       <Modal
+  visible={isShareModalVisible}
+  animationType="slide"
+  transparent={true}
+  onRequestClose={closeShareModal}
+  statusBarTranslucent={true}
+>
+  <KeyboardAvoidingView
+    behavior={Platform.OS === "ios" ? "padding" : "height"}
+    style={{ flex: 1 }}
+  >
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+      <SafeAreaView style={styles.modalOverlay}>
+        <View style={styles.shareModal}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Отправить пост</Text>
+            <TouchableOpacity onPress={closeShareModal}>
+              <Text style={{ color: '#16DBBE', fontSize: 18, fontWeight: 'bold' }}>✕</Text>
+            </TouchableOpacity>
+          </View>
 
-              <FlatList
-                data={mockUsers}
-                renderItem={renderUserItem}
-                keyExtractor={item => item.id}
-                style={styles.usersList}
-                showsVerticalScrollIndicator={false}
+          <FlatList
+            data={mockUsers}
+            renderItem={renderUserItem}
+            keyExtractor={(item) => item.id}
+            style={styles.usersList}
+            showsVerticalScrollIndicator={false}
+          />
+
+          {/* === БЛОК ВВОДА КОММЕНТАРИЯ === */}
+          <View style={styles.commentSection}>
+            <View style={styles.commentInputContainer}>
+              <EmojiTextInput
+                value={shareComment}
+                onChangeText={setShareComment}
+                placeholder="Добавьте комментарий..."
+                theme={{
+                  inputText: theme.text,
+                  inputPlaceholder: theme.secondaryText,
+                }}
               />
-
-              <View style={styles.commentInputContainer}>
-                <EmojiTextInput
-                  value={shareComment}
-                  onChangeText={setShareComment}
-                  placeholder="Добавьте комментарий..."
-                  theme={{
-                    inputText: theme.text,
-                    inputPlaceholder: theme.secondaryText
-                  }}
-                />
-              </View>
-
-              <TouchableOpacity
-                style={[
-                  styles.sendButton,
-                  !selectedUser && styles.sendButtonDisabled
-                ]}
-                onPress={handleShareSubmit}
-                disabled={!selectedUser}
-              >
-                <Text style={styles.sendButtonText}>
-                  {selectedUser ? `Отправить ${selectedUser.name}` : 'Выберите получателя'}
-                </Text>
-              </TouchableOpacity>
             </View>
-          </SafeAreaView>
-        </Modal>
+
+            {/* === РЯД ЭМОДЗИ ПОД ИНПУТОМ === */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.popularEmojiRow}
+            >
+              {['😂', '🤣', '🥰', '😍', '😭', '😎', '🔥'].map((emoji, i) => (
+                <TouchableOpacity
+                  key={i}
+                  onPress={() => setShareComment((prev) => (prev || "") + emoji)}
+                  style={styles.emojiButton}
+                >
+                  <Twemoji emoji={emoji} size={30} />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+
+          {/* КНОПКА ОТПРАВИТЬ */}
+          <TouchableOpacity
+            style={[
+              styles.sendButton,
+              !selectedUser && styles.sendButtonDisabled,
+            ]}
+            onPress={handleShareSubmit}
+            disabled={!selectedUser}
+          >
+            <Text style={styles.sendButtonText}>
+              {selectedUser
+                ? `Отправить ${selectedUser.name}`
+                : "Выберите получателя"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    </TouchableWithoutFeedback>
+  </KeyboardAvoidingView>
+</Modal>
+
 
         <CustomAlert
           visible={alertVisible}

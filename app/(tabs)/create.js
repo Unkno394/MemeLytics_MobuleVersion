@@ -25,6 +25,7 @@ import { useAppFonts } from "../../src/assets/fonts/fonts";
 import { ThemeContext } from "../../src/context/ThemeContext";
 
 // Импортируем оптимизированные компоненты
+import StickerModal from '../../components/StickerModal';
 import DraggableText from '../../components/DraggableText';
 import DrawingCanvas from '../../components/DrawingCanvas';
 import DrawingTools from '../../components/DrawingTools';
@@ -168,6 +169,8 @@ const CreateMemeScreen = () => {
     width: SCREEN_WIDTH, 
     height: SCREEN_WIDTH 
   });
+  const [isStickerModalVisible, setIsStickerModalVisible] = useState(false);
+const [selectedEmoji, setSelectedEmoji] = useState(null);
   const lastPickedColor = useRef("#FFFFFF");
   const [imageLayout, setImageLayout] = useState({ x: 0, y: 0, width: 0, height: 0 });
   const magnifierUpdateTimeout = useRef(null);
@@ -313,6 +316,36 @@ setIsDrawingMode(false);
       }
     })();
   }, [updateImageDimensions]);
+const handleSelectEmoji = useCallback((emoji) => {
+  // Создаем текстовый блок с эмодзи
+  const newId = textBlocks.length
+    ? Math.max(...textBlocks.map((t) => Number(t.id) || 0)) + 1
+    : 1;
+
+  const newBlock = {
+    id: newId,
+    text: emoji,
+    fontSize: Math.max(40, fontSize), // Эмодзи обычно больше
+    color: fontColor,
+    fontFamily,
+    x: SCREEN_WIDTH / 2 - 20, // Центрируем
+    y: imageDimensions.height / 2 - 20,
+    scale: 1,
+    background: false,
+    backgroundColor: "#ffffff",
+  };
+
+  setTextBlocks([...textBlocks, newBlock]);
+  // Просто закрываем модалку, без алерта
+}, [textBlocks, fontSize, fontColor, fontFamily, imageDimensions]);
+
+const handleStickers = useCallback(() => {
+  if (!image) {
+    showError("Сначала выберите изображение");
+    return;
+  }
+  setIsStickerModalVisible(true);
+}, [image, showError]);
 
   // Сохранение черновика
   useEffect(() => {
@@ -553,12 +586,6 @@ const handleTouchEnd = useCallback(() => {
   setMagnifierVisible(false);
   setEyedropperActive(false);
 }, []);
-
-  // Функция для стикеров
-  const handleStickers = useCallback(() => {
-    if (!image) return showError("Сначала выберите изображение");
-    showError("Функция стикеров в разработке");
-  }, [image, showError]);
 
   // Функция для кнопки "Далее"
   const handleNext = useCallback(async () => {
@@ -933,7 +960,15 @@ const handleTouchEnd = useCallback(() => {
             setSelectedText(null);
           }}
         />
-
+<StickerModal
+  visible={isStickerModalVisible}
+  onClose={() => setIsStickerModalVisible(false)}
+  onSelectEmoji={handleSelectEmoji}
+  onSelectSticker={(sticker) => {
+    // Будет реализовано когда появятся стикеры
+    showError("Стикеры появятся в следующем обновлении");
+  }}
+/>
         {/* Кастомный алерт */}
         <CustomAlert
           visible={alertVisible}

@@ -1,11 +1,13 @@
+// components/DraggableText.js
 import React from 'react';
-import { View, Text } from 'react-native';
+import { View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   runOnJS,
 } from 'react-native-reanimated';
+import { EmojiText } from './Twemoji'; // Добавляем импорт EmojiText
 
 const DraggableText = React.memo(({
   id,
@@ -20,7 +22,7 @@ const DraggableText = React.memo(({
   onOpenEditor,
   containerWidth,
   containerHeight,
-  isDrawingMode = false, // теперь ожидаем этот пропс
+  isDrawingMode = false,
   isSelected = false,
   onSelect,
   onUpdate,
@@ -179,7 +181,6 @@ const DraggableText = React.memo(({
 
   return (
     <GestureDetector gesture={composedGesture}>
-      {/* pointerEvents управляем как пропсом, а не в animated style */}
       <Animated.View
         style={animatedStyle}
         pointerEvents={isDrawingMode ? "none" : "auto"}
@@ -194,7 +195,9 @@ const DraggableText = React.memo(({
             borderColor: isSelected ? "#16DBBE" : "transparent",
           }}
         >
-          <Text
+          {/* ЗАМЕНЯЕМ Text на EmojiText */}
+          <EmojiText
+            text={text}
             style={{
               fontSize,
               color,
@@ -205,9 +208,7 @@ const DraggableText = React.memo(({
               textShadowRadius: 3,
               includeFontPadding: false,
             }}
-          >
-            {text}
-          </Text>
+          />
         </View>
       </Animated.View>
     </GestureDetector>
@@ -215,4 +216,3 @@ const DraggableText = React.memo(({
 });
 
 export default DraggableText;
-
