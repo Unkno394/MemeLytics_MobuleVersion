@@ -14,12 +14,52 @@ import Svg, { Path, Defs, LinearGradient as SvgLinearGradient, Stop } from "reac
 import { ThemeContext } from "../../../src/context/ThemeContext";
 import { router } from "expo-router";
 import CustomAlert from "../../../components/CustomAlert";
-import { EmojiText } from "../../../components/Twemoji";
 
 const { width, height } = Dimensions.get("window");
 const STEP = 70;
 const NAVIGATION_DELAY = 80;
+const UNSUPPORTED_EMOJIS = new Set(["™️", "©️", "®️"]);
 
+function makeCodePoints(emoji) {
+  return Array.from(emoji)
+    .map(char => char.codePointAt(0).toString(16))
+    .join("-");
+}
+
+const EmojiText = React.memo(({ text, style }) => {
+  if (!text) return null;
+
+  const parts = Array.from(text);
+  const fontSize = style?.fontSize || 16;
+  const emojiSize = fontSize * 1.1;
+
+  return (
+    <Text style={[style, { flexWrap: "nowrap" }]}>
+      {parts.map((char, i) => {
+        const isEmoji = /\p{Extended_Pictographic}/u.test(char);
+        if (isEmoji && !UNSUPPORTED_EMOJIS.has(char)) {
+          const codePoints = makeCodePoints(char);
+          const uri = `https://cdnjs.cloudflare.com/ajax/libs/twemoji/15.1.0/72x72/${codePoints}.png`;
+          return (
+            <Image
+              key={i}
+              source={{ uri }}
+              style={{
+                width: emojiSize,
+                height: emojiSize,
+                marginHorizontal: 1,
+                alignSelf: "center",
+                transform: [{ translateY: fontSize * 0.08 }],
+              }}
+            />
+          );
+        } else {
+          return <Text key={i} style={style}>{char}</Text>;
+        }
+      })}
+    </Text>
+  );
+});
 // ------------------- ICONS -------------------
 const HomeIcon = ({ color = "#000" }) => (
   <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
@@ -233,7 +273,7 @@ const NotificationsScreen = () => {
     const navigate = () => {
       switch (tabId) {
         case "home":
-          router.push("/index");
+          router.push("/");
           break;
         case "search":
           router.push("/search");

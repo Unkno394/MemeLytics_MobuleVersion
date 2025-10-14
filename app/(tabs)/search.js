@@ -72,23 +72,32 @@ const AccountIcon = React.memo(({ color = "#000" }) => (
 ));
 
 // Memoized Navigation Item Component
-const NavItem = React.memo(({ 
+const TabItem = React.memo(({ 
   tab, 
   index, 
   isActive, 
-  onPress, 
+  isDark, 
   theme, 
-  isDark,
-  animations 
+  onPress, 
+  circleScales, 
+  iconTranslates, 
+  textOpacities, 
+  textTranslates,
+  translateX 
 }) => {
-  const { iconTranslates, circleScales, textOpacities, textTranslates, iconActiveOpacity } = animations;
-  const isRandom = tab.id === "random";
-  const IconComponent = tab.icon;
+  const { id, icon: IconComponent, label } = tab;
+  const isRandom = id === "random";
 
-  const activeOpacity = iconActiveOpacity(index);
+  const activeOpacity = translateX.interpolate({
+    inputRange: [(index - 0.36) * STEP, index * STEP, (index + 0.36) * STEP],
+    outputRange: [0, 1, 0],
+    extrapolate: "clamp",
+  });
+
+  const styles = useMemo(() => createTabItemStyles(isDark), [isDark]);
 
   return (
-    <TouchableOpacity style={styles.navItem} onPress={onPress} activeOpacity={0.8}>
+    <TouchableOpacity style={styles.navItem} onPress={() => onPress(id)} activeOpacity={0.8}>
       <View style={styles.navLink}>
         <Animated.View style={[styles.iconWrapper, { transform: [{ translateY: iconTranslates[index] }] }]}>
           {isRandom ? <CubeIcon active={isActive} /> : <IconComponent color={theme.inactiveIcon} />}
@@ -121,7 +130,7 @@ const NavItem = React.memo(({
             }
           ]}
         >
-          {tab.label}
+          {label}
         </Animated.Text>
 
         <Animated.View 
@@ -149,7 +158,7 @@ const NavItem = React.memo(({
               opacity: circleScales[index] 
             }}
           >
-            {tab.id === "random" ? <CubeIcon active={true} /> : <IconComponent color={"#000"} />}
+            {isRandom ? <CubeIcon active={true} /> : <IconComponent color={"#000"} />}
           </Animated.View>
           <View 
             style={[
@@ -187,6 +196,8 @@ const MasonryGrid = React.memo(({ memes, isDark }) => {
     });
   }, []);
 
+  const styles = useMemo(() => createMasonryStyles(isDark), [isDark]);
+
   return (
     <View style={styles.masonryContainer}>
       {columns.map((column, columnIndex) => (
@@ -194,7 +205,7 @@ const MasonryGrid = React.memo(({ memes, isDark }) => {
           {column.map((meme) => (
             <TouchableOpacity 
               key={meme.id} 
-              style={[styles.memeItem, { width: columnWidth }, { backgroundColor: isDark ? "#1A1B30" : "#FFFFFF" }]}
+              style={[styles.memeItem, { width: columnWidth }]}
               onPress={() => handleMemePress(meme)}
             >
               <Image
@@ -215,8 +226,8 @@ const SearchScreen = () => {
   const [query, setQuery] = useState("");
   const [activeTab, setActiveTab] = useState("search");
   const [isInputFocused, setIsInputFocused] = useState(false);
-
-  // Memoized tabs
+  
+  const initialActive = "search";
   const tabs = useMemo(() => [
     { id: "home", icon: HomeIcon, label: "Главная" },
     { id: "search", icon: SearchIcon, label: "Поиск" },
@@ -225,7 +236,14 @@ const SearchScreen = () => {
     { id: "profile", icon: AccountIcon, label: "Профиль" },
   ], []);
 
-  // Memoized theme
+  const initialIndex = useMemo(() => tabs.findIndex((t) => t.id === initialActive), [tabs]);
+  
+  const translateX = useRef(new Animated.Value(initialIndex * STEP)).current;
+  const circleScales = useRef(tabs.map((t) => new Animated.Value(t.id === initialActive ? 1 : 0))).current;
+  const iconTranslates = useRef(tabs.map((t) => new Animated.Value(t.id === initialActive ? -32 : 0))).current;
+  const textOpacities = useRef(tabs.map((t) => new Animated.Value(t.id === initialActive ? 1 : 0))).current;
+  const textTranslates = useRef(tabs.map((t) => new Animated.Value(t.id === initialActive ? 10 : 20))).current;
+
   const theme = useMemo(() => isDark
     ? {
         background: "#0F111E",
@@ -250,19 +268,6 @@ const SearchScreen = () => {
         inactiveIcon: "#7C8599",
       }, [isDark]);
 
-  // Memoized animations
-  const animations = useMemo(() => {
-    const initialIndex = tabs.findIndex((t) => t.id === activeTab);
-    
-    return {
-      translateX: new Animated.Value(initialIndex * STEP),
-      circleScales: tabs.map((t) => new Animated.Value(t.id === activeTab ? 1 : 0)),
-      iconTranslates: tabs.map((t) => new Animated.Value(t.id === activeTab ? -32 : 0)),
-      textOpacities: tabs.map((t) => new Animated.Value(t.id === activeTab ? 1 : 0)),
-      textTranslates: tabs.map((t) => new Animated.Value(t.id === activeTab ? 10 : 20)),
-    };
-  }, [tabs, activeTab]);
-
   // Search icon animation
   const searchIconPosition = useRef(new Animated.Value(0)).current;
   const inputRef = useRef(null);
@@ -274,14 +279,6 @@ const SearchScreen = () => {
       inputRange: [0, 1],
       outputRange: [0, width - 90]
     }), [searchIconPosition]);
-
-  // Memoized icon active opacity interpolation
-  const iconActiveOpacity = useCallback((index) => 
-    animations.translateX.interpolate({
-      inputRange: [(index - 0.36) * STEP, index * STEP, (index + 0.36) * STEP],
-      outputRange: [0, 1, 0],
-      extrapolate: "clamp",
-    }), [animations.translateX]);
 
   // Search icon animation
   useEffect(() => {
@@ -296,47 +293,23 @@ const SearchScreen = () => {
   useEffect(() => {
     const index = tabs.findIndex((tab) => tab.id === activeTab);
 
-    const animationConfig = {
+    Animated.spring(translateX, {
+      toValue: index * STEP,
       useNativeDriver: true,
       friction: 8,
       tension: 40,
-    };
-
-    const animationsBatch = [
-      Animated.spring(animations.translateX, {
-        toValue: index * STEP,
-        ...animationConfig,
-      })
-    ];
+    }).start();
 
     tabs.forEach((tab, i) => {
       const isActive = tab.id === activeTab;
-      
-      animationsBatch.push(
-        Animated.parallel([
-          Animated.spring(animations.circleScales[i], { 
-            toValue: isActive ? 1 : 0, 
-            ...animationConfig 
-          }),
-          Animated.spring(animations.iconTranslates[i], { 
-            toValue: isActive ? -32 : 0, 
-            ...animationConfig 
-          }),
-          Animated.timing(animations.textOpacities[i], { 
-            toValue: isActive ? 1 : 0, 
-            duration: 200, 
-            useNativeDriver: true 
-          }),
-          Animated.spring(animations.textTranslates[i], { 
-            toValue: isActive ? 10 : 20, 
-            ...animationConfig 
-          }),
-        ])
-      );
+      Animated.spring(circleScales[i], { toValue: isActive ? 1 : 0, useNativeDriver: true }).start();
+      Animated.spring(iconTranslates[i], { toValue: isActive ? -32 : 0, useNativeDriver: true }).start();
+      Animated.parallel([
+        Animated.timing(textOpacities[i], { toValue: isActive ? 1 : 0, duration: 200, useNativeDriver: true }),
+        Animated.spring(textTranslates[i], { toValue: isActive ? 10 : 20, useNativeDriver: true }),
+      ]).start();
     });
-
-    Animated.parallel(animationsBatch).start();
-  }, [activeTab, tabs, animations]);
+  }, [activeTab, tabs]);
 
   // Navigation handler
   const navigateTo = useCallback((tabId) => {
@@ -412,8 +385,10 @@ const SearchScreen = () => {
     [memes, isDark]
   );
 
+  const styles = useMemo(() => createStyles(theme, isDark), [theme, isDark]);
+
   return (
-    <View style={[styles.container, { backgroundColor: theme.background }]}>
+    <View style={styles.container}>
       {/* Search Bar */}
       <View style={[styles.searchBar, { backgroundColor: theme.inputBg }]}>
         <Animated.View 
@@ -468,28 +443,24 @@ const SearchScreen = () => {
             style={styles.navigationGradient}
           >
             {tabs.map((tab, index) => (
-              <NavItem
+              <TabItem
                 key={tab.id}
                 tab={tab}
                 index={index}
                 isActive={tab.id === activeTab}
-                onPress={() => handleTabPress(tab.id)}
-                theme={theme}
                 isDark={isDark}
-                animations={{ ...animations, iconActiveOpacity }}
+                theme={theme}
+                onPress={handleTabPress}
+                circleScales={circleScales}
+                iconTranslates={iconTranslates}
+                textOpacities={textOpacities}
+                textTranslates={textTranslates}
+                translateX={translateX}
               />
             ))}
           </LinearGradient>
 
-          <Animated.View 
-            style={[
-              styles.indicator, 
-              { 
-                transform: [{ translateX: animations.translateX }],
-                borderColor: isDark ? "#0F111E" : "#EAF0FF" 
-              }
-            ]}
-          >
+          <Animated.View style={[styles.indicator, { transform: [{ translateX: translateX }] }]}>
             <LinearGradient 
               colors={theme.indicatorGradient} 
               start={{ x: 0.5, y: 0 }} 
@@ -503,10 +474,11 @@ const SearchScreen = () => {
   );
 };
 
-// Styles outside component to prevent recreation
-const styles = StyleSheet.create({
+// ------------------- StyleSheet Creators -------------------
+const createStyles = (theme, isDark) => StyleSheet.create({
   container: { 
     flex: 1, 
+    backgroundColor: theme.background 
   },
   searchBar: {
     flexDirection: "row",
@@ -538,29 +510,6 @@ const styles = StyleSheet.create({
   scrollViewContent: {
     paddingBottom: 100,
   },
-  masonryContainer: {
-    flexDirection: "row",
-    paddingHorizontal: 8,
-    paddingTop: 8,
-  },
-  column: {
-    flex: 1,
-    marginHorizontal: 4,
-  },
-  memeItem: {
-    marginBottom: 8,
-    borderRadius: 10,
-    overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  memeImage: {
-    width: "100%",
-    borderRadius: 10,
-  },
   navigationWrapper: { 
     position: "absolute", 
     bottom: 0, 
@@ -582,6 +531,55 @@ const styles = StyleSheet.create({
     justifyContent: "center", 
     alignItems: "center" 
   },
+  indicator: { 
+    left: 5, 
+    position: "absolute", 
+    top: -35, 
+    width: 70, 
+    height: 70, 
+    borderRadius: 35, 
+    borderWidth: 6, 
+    borderColor: isDark ? "#0F111E" : "#EAF0FF", 
+    justifyContent: "center", 
+    alignItems: "center" 
+  },
+  indicatorGradient: { 
+    width: "100%", 
+    height: "100%", 
+    borderRadius: 35, 
+    justifyContent: "center", 
+    alignItems: "center" 
+  },
+});
+
+const createMasonryStyles = (isDark) => StyleSheet.create({
+  masonryContainer: { 
+    flexDirection: "row", 
+    paddingHorizontal: 8, 
+    paddingTop: 8 
+  },
+  column: { 
+    flex: 1, 
+    marginHorizontal: 4 
+  },
+  memeItem: { 
+    marginBottom: 8, 
+    borderRadius: 10, 
+    overflow: "hidden", 
+    backgroundColor: isDark ? "#1A1B30" : "#FFFFFF", 
+    shadowColor: "#000", 
+    shadowOffset: { width: 0, height: 2 }, 
+    shadowOpacity: 0.1, 
+    shadowRadius: 4, 
+    elevation: 3 
+  },
+  memeImage: { 
+    width: "100%", 
+    borderRadius: 10 
+  },
+});
+
+const createTabItemStyles = (isDark) => StyleSheet.create({
   navItem: { 
     width: STEP, 
     height: 70, 
@@ -605,48 +603,30 @@ const styles = StyleSheet.create({
     fontSize: 10, 
     letterSpacing: 0.5 
   },
-  circleWrapper: {
-    position: "absolute",
-    top: -25,
-    left: 10,
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    justifyContent: "center",
-    alignItems: "center",
-    zIndex: 3,
-    overflow: "hidden",
-  },
-  circleGradient: {
-    width: "100%",
-    height: "100%",
-    borderRadius: 25,
-  },
-  circleBorder: {
-    position: "absolute",
-    width: "100%",
-    height: "100%",
-    borderRadius: 25,
-    borderWidth: 1.8,
-    backgroundColor: "transparent",
-  },
-  indicator: { 
-    left: 5, 
+  circleWrapper: { 
     position: "absolute", 
-    top: -35, 
-    width: 70, 
-    height: 70, 
-    borderRadius: 35, 
-    borderWidth: 6, 
+    top: -25, 
+    left: 10, 
+    width: 50, 
+    height: 50, 
+    borderRadius: 25, 
     justifyContent: "center", 
-    alignItems: "center" 
+    alignItems: "center", 
+    zIndex: 3, 
+    overflow: "hidden" 
   },
-  indicatorGradient: { 
+  circleGradient: { 
     width: "100%", 
     height: "100%", 
-    borderRadius: 35, 
-    justifyContent: "center", 
-    alignItems: "center" 
+    borderRadius: 25 
+  },
+  circleBorder: { 
+    position: "absolute", 
+    width: "100%", 
+    height: "100%", 
+    borderRadius: 25, 
+    borderWidth: 1.8, 
+    backgroundColor: "transparent" 
   },
 });
 
