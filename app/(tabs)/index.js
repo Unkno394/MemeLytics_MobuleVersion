@@ -7,10 +7,12 @@ import {
   Animated,
   ScrollView,
   Image,
+  Text,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import Svg, { Path, Defs, LinearGradient as SvgLinearGradient, Stop } from "react-native-svg";
 import { ThemeContext } from "../../src/context/ThemeContext";
+import { AuthContext } from "../../src/context/AuthContext"; // ДОБАВИТЬ ИМПОРТ
 import { router, useLocalSearchParams } from "expo-router";
 import CustomAlert from "../../components/CustomAlert";
 
@@ -174,9 +176,33 @@ const TabItem = React.memo(({
 
 // ------------------- MainScreen -------------------
 const MainScreen = () => {
+const { user, isLoading } = useContext(AuthContext);
   const params = useLocalSearchParams();
   const themeContext = useContext(ThemeContext);
   const isDark = useMemo(() => themeContext?.isDark ?? false, [themeContext]);
+
+  if (isLoading) {
+    return (
+      <View style={[ 
+        { flex: 1, justifyContent: "center", alignItems: "center" },
+        { backgroundColor: isDark ? "#0F111E" : "#EAF0FF" }
+      ]}>
+        <Text style={{ color: isDark ? "#FFFFFF" : "#1B1F33" }}>Загрузка...</Text>
+      </View>
+    );
+  }
+
+  // Если не авторизован - редирект на регистрацию
+  useEffect(() => {
+    if (!user) {
+      router.replace("/registration");
+    }
+  }, [user]);
+
+  // Если нет пользователя - показываем ничего (редирект сработает)
+  if (!user) {
+    return null;
+  }
 
   const tabs = useMemo(
     () => [
