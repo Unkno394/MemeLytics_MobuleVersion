@@ -20,13 +20,11 @@ import Svg, { Path } from "react-native-svg";
 import * as ImagePicker from "expo-image-picker";
 import { ThemeContext } from "../../src/context/ThemeContext";
 import { router } from "expo-router";
-import { EmojiText } from "../../components/Twemoji";
+import { EmojiText, Twemoji } from "../../components/Twemoji";
 import ActionModal from "../../components/ActionModal";
 import CustomAlert from "../../components/CustomAlert";
-import { apiClient } from "../../api/client";
+import { useProfile, useImagePicker } from "../../hooks/index";
 import { useAuth } from "../../src/context/AuthContext";
-
-const API_BASE_URL = 'http://192.168.1.18:8000';
 
 const BackIcon = ({ color = "#16DBBE" }) => (
   <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
@@ -91,6 +89,28 @@ const CredentialsModal = ({ visible, type, onClose, theme, onSave, showAlert, is
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  
+  // Состояния для отображения паролей
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+  // Иконка глаза
+
+const EyeIcon = ({ show, onPress, disabled }) => (
+  <TouchableOpacity
+    onPress={onPress}
+    disabled={disabled}
+    style={styles.eyeButton}
+    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+  >
+    <Twemoji 
+      emoji={show ? "🙉" : "🙈"} 
+      size={24} 
+      style={{ opacity: disabled ? 0.5 : 1 }} 
+    />
+  </TouchableOpacity>
+);
 
   const resetForm = () => {
     setCurrentEmail("");
@@ -98,6 +118,9 @@ const CredentialsModal = ({ visible, type, onClose, theme, onSave, showAlert, is
     setCurrentPassword("");
     setNewPassword("");
     setConfirmPassword("");
+    setShowCurrentPassword(false);
+    setShowNewPassword(false);
+    setShowConfirmPassword(false);
   };
 
   const handleClose = () => {
@@ -105,8 +128,13 @@ const CredentialsModal = ({ visible, type, onClose, theme, onSave, showAlert, is
     onClose();
   };
 
-const handleSave = () => {
+  const handleSave = () => {
+  // Проверка на эмодзи
   if (type === 'email') {
+    if (containsEmoji(currentEmail) || containsEmoji(newEmail)) {
+      showAlert("Ошибка", "Email не должен содержать эмодзи");
+      return;
+    }
     if (!currentEmail || !newEmail) {
       showAlert("Ошибка", "Заполните все поля");
       return;
@@ -121,26 +149,33 @@ const handleSave = () => {
     }
     onSave({ type: 'email', currentEmail, newEmail });
   } else {
-      if (!currentPassword || !newPassword || !confirmPassword) {
-        showAlert("Ошибка", "Заполните все поля");
-        return;
-      }
-      if (newPassword !== confirmPassword) {
-        showAlert("Ошибка", "Пароли не совпадают");
-        return;
-      }
-      if (newPassword.length < 6) {
-        showAlert("Ошибка", "Пароль должен содержать минимум 6 символов");
-        return;
-      }
-      onSave({ type: 'password', currentPassword, newPassword });
+    if (containsEmoji(currentPassword) || containsEmoji(newPassword) || containsEmoji(confirmPassword)) {
+      showAlert("Ошибка", "Пароль не должен содержать эмодзи");
+      return;
     }
-  };
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      showAlert("Ошибка", "Заполните все поля");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      showAlert("Ошибка", "Пароли не совпадают");
+      return;
+    }
+    if (newPassword.length < 6) {
+      showAlert("Ошибка", "Пароль должен содержать минимум 6 символов");
+      return;
+    }
+    onSave({ type: 'password', currentPassword, newPassword });
+  }
+};
 
   const isValidEmail = (email) => {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   };
-
+const containsEmoji = (text) => {
+  const emojiRegex = /[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu;
+  return emojiRegex.test(text);
+};
   return (
     <Modal
       visible={visible}
@@ -187,7 +222,10 @@ const handleSave = () => {
             )}
           </TouchableOpacity>
         </View>
-
+<KeyboardAvoidingView
+  behavior={Platform.OS === "ios" ? "padding" : "height"}
+  style={{ flex: 1 }}
+>
         <ScrollView 
           style={styles.modalContent}
           showsVerticalScrollIndicator={false}
@@ -211,138 +249,183 @@ const handleSave = () => {
 
           {type === 'email' ? (
             <>
-              <View style={styles.inputGroup}>
-                <Text style={[styles.inputLabel, { color: theme.text }]}>
-                  Текущий email
-                </Text>
-                <TextInput
-                  style={[
-                    styles.modalInput,
-                    { 
-                      backgroundColor: theme.inputBackground,
-                      color: theme.text,
-                      borderColor: theme.border
-                    }
-                  ]}
-                  placeholder="your@current.email"
-                  placeholderTextColor={theme.inputPlaceholder}
-                  value={currentEmail}
-                  onChangeText={setCurrentEmail}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  autoComplete="email"
-                  editable={!isLoading}
-                />
-              </View>
+             <View style={styles.inputGroup}>
+  <Text style={[styles.inputLabel, { color: theme.text }]}>
+    Текущий email
+  </Text>
+  <TextInput
+    style={[
+      styles.modalInput,
+      { 
+        backgroundColor: theme.inputBackground,
+        color: theme.text,
+        borderColor: theme.border
+      }
+    ]}
+    placeholder="your@current.email"
+    placeholderTextColor={theme.inputPlaceholder}
+    value={currentEmail}
+    onChangeText={(text) => {
+      if (!containsEmoji(text)) {
+        setCurrentEmail(text);
+      }
+    }}
+    keyboardType="email-address"
+    autoCapitalize="none"
+    autoCorrect={false}
+    autoComplete="email"
+    editable={!isLoading}
+  />
+</View>
 
-              <View style={styles.inputGroup}>
-                <Text style={[styles.inputLabel, { color: theme.text }]}>
-                  Новый email
-                </Text>
-                <TextInput
-                  style={[
-                    styles.modalInput,
-                    { 
-                      backgroundColor: theme.inputBackground,
-                      color: theme.text,
-                      borderColor: theme.border
-                    }
-                  ]}
-                  placeholder="your@new.email"
-                  placeholderTextColor={theme.inputPlaceholder}
-                  value={newEmail}
-                  onChangeText={setNewEmail}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  autoComplete="email"
-                  editable={!isLoading}
-                />
-              </View>
+<View style={styles.inputGroup}>
+  <Text style={[styles.inputLabel, { color: theme.text }]}>
+    Новый email
+  </Text>
+  <TextInput
+    style={[
+      styles.modalInput,
+      { 
+        backgroundColor: theme.inputBackground,
+        color: theme.text,
+        borderColor: theme.border
+      }
+    ]}
+    placeholder="your@new.email"
+    placeholderTextColor={theme.inputPlaceholder}
+    value={newEmail}
+    onChangeText={(text) => {
+      if (!containsEmoji(text)) {
+        setNewEmail(text);
+      }
+    }}
+    keyboardType="email-address"
+    autoCapitalize="none"
+    autoCorrect={false}
+    autoComplete="email"
+    editable={!isLoading}
+  />
+</View>
             </>
           ) : (
             <>
-              <View style={styles.inputGroup}>
-                <Text style={[styles.inputLabel, { color: theme.text }]}>
-                  Текущий пароль
-                </Text>
-                <TextInput
-                  style={[
-                    styles.modalInput,
-                    { 
-                      backgroundColor: theme.inputBackground,
-                      color: theme.text,
-                      borderColor: theme.border
-                    }
-                  ]}
-                  placeholder="Введите текущий пароль"
-                  placeholderTextColor={theme.inputPlaceholder}
-                  value={currentPassword}
-                  onChangeText={setCurrentPassword}
-                  secureTextEntry
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  autoComplete="password"
-                  editable={!isLoading}
-                />
-              </View>
+<View style={styles.inputGroup}>
+  <Text style={[styles.inputLabel, { color: theme.text }]}>
+    Текущий пароль
+  </Text>
+  <View style={styles.passwordInputContainer}>
+    <TextInput
+      style={[
+        styles.modalInput,
+        styles.passwordInput,
+        { 
+          backgroundColor: theme.inputBackground,
+          color: theme.text,
+          borderColor: theme.border
+        }
+      ]}
+      placeholder="Введите текущий пароль"
+      placeholderTextColor={theme.inputPlaceholder}
+      value={currentPassword}
+      onChangeText={(text) => {
+        if (!containsEmoji(text)) {
+          setCurrentPassword(text);
+        }
+      }}
+      secureTextEntry={!showCurrentPassword}
+      autoCapitalize="none"
+      autoCorrect={false}
+      autoComplete="password"
+      editable={!isLoading}
+    />
+    <EyeIcon 
+      show={showCurrentPassword} 
+      onPress={() => setShowCurrentPassword(!showCurrentPassword)}
+      disabled={isLoading}
+    />
+  </View>
+</View>
 
-              <View style={styles.inputGroup}>
-                <Text style={[styles.inputLabel, { color: theme.text }]}>
-                  Новый пароль
-                </Text>
-                <TextInput
-                  style={[
-                    styles.modalInput,
-                    { 
-                      backgroundColor: theme.inputBackground,
-                      color: theme.text,
-                      borderColor: theme.border
-                    }
-                  ]}
-                  placeholder="Придумайте новый пароль"
-                  placeholderTextColor={theme.inputPlaceholder}
-                  value={newPassword}
-                  onChangeText={setNewPassword}
-                  secureTextEntry
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  autoComplete="new-password"
-                  editable={!isLoading}
-                />
-                <Text style={[styles.inputHint, { color: theme.secondaryText }]}>
-                  Минимум 6 символов
-                </Text>
-              </View>
+<View style={styles.inputGroup}>
+  <Text style={[styles.inputLabel, { color: theme.text }]}>
+    Новый пароль
+  </Text>
+  <View style={styles.passwordInputContainer}>
+    <TextInput
+      style={[
+        styles.modalInput,
+        styles.passwordInput,
+        { 
+          backgroundColor: theme.inputBackground,
+          color: theme.text,
+          borderColor: theme.border
+        }
+      ]}
+      placeholder="Придумайте новый пароль"
+      placeholderTextColor={theme.inputPlaceholder}
+      value={newPassword}
+      onChangeText={(text) => {
+        if (!containsEmoji(text)) {
+          setNewPassword(text);
+        }
+      }}
+      secureTextEntry={!showNewPassword}
+      autoCapitalize="none"
+      autoCorrect={false}
+      autoComplete="new-password"
+      editable={!isLoading}
+    />
+    <EyeIcon 
+      show={showNewPassword} 
+      onPress={() => setShowNewPassword(!showNewPassword)}
+      disabled={isLoading}
+    />
+  </View>
+  <Text style={[styles.inputHint, { color: theme.secondaryText }]}>
+    Минимум 6 символов
+  </Text>
+</View>
 
-              <View style={styles.inputGroup}>
-                <Text style={[styles.inputLabel, { color: theme.text }]}>
-                  Подтвердите пароль
-                </Text>
-                <TextInput
-                  style={[
-                    styles.modalInput,
-                    { 
-                      backgroundColor: theme.inputBackground,
-                      color: theme.text,
-                      borderColor: theme.border
-                    }
-                  ]}
-                  placeholder="Повторите новый пароль"
-                  placeholderTextColor={theme.inputPlaceholder}
-                  value={confirmPassword}
-                  onChangeText={setConfirmPassword}
-                  secureTextEntry
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  autoComplete="new-password"
-                  editable={!isLoading}
-                />
-              </View>
+<View style={styles.inputGroup}>
+  <Text style={[styles.inputLabel, { color: theme.text }]}>
+    Подтвердите пароль
+  </Text>
+  <View style={styles.passwordInputContainer}>
+    <TextInput
+      style={[
+        styles.modalInput,
+        styles.passwordInput,
+        { 
+          backgroundColor: theme.inputBackground,
+          color: theme.text,
+          borderColor: theme.border
+        }
+      ]}
+      placeholder="Повторите новый пароль"
+      placeholderTextColor={theme.inputPlaceholder}
+      value={confirmPassword}
+      onChangeText={(text) => {
+        if (!containsEmoji(text)) {
+          setConfirmPassword(text);
+        }
+      }}
+      secureTextEntry={!showConfirmPassword}
+      autoCapitalize="none"
+      autoCorrect={false}
+      autoComplete="new-password"
+      editable={!isLoading}
+    />
+    <EyeIcon 
+      show={showConfirmPassword} 
+      onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+      disabled={isLoading}
+    />
+  </View>
+</View>
             </>
           )}
         </ScrollView>
+        </KeyboardAvoidingView>
       </View>
     </Modal>
   );
@@ -351,8 +434,21 @@ const handleSave = () => {
 const EditProfileScreen = () => {
   const navigation = useNavigation();
   const { isDark, toggleTheme } = useContext(ThemeContext);
-const { logout, user, updateUser, updateUserData } = useAuth();
+  const { logout, user, updateUser, updateUserData } = useAuth();
   
+  // Используем кастомные хуки
+  const { 
+    updateAvatar, 
+    updateUsername, 
+    updateEmail, 
+    updatePassword, 
+    updateSettings,
+    loading: profileLoading,
+    error: profileError 
+  } = useProfile();
+  
+  const { pickImage } = useImagePicker();
+
   // Состояния пользователя
   const [avatar, setAvatar] = useState(user?.avatar_url ? { uri: user.avatar_url } : require("../../src/assets/cool_avatar.jpg"));
   const [username, setUsername] = useState(user?.username || "User123");
@@ -403,137 +499,99 @@ const { logout, user, updateUser, updateUserData } = useAuth();
     setAlertVisible(true);
   };
 
-const uploadAvatar = async (imageUri) => {
-  setIsLoading(true);
-  try {
-    const response = await apiClient.uploadAvatar(imageUri);
-
-    // Обновляем аватар в состоянии
-    setAvatar({ uri: response.avatar_url });
-    
-    // Обновляем пользователя в контексте
-    if (updateUser) {
-      updateUser({ avatar_url: response.avatar_url });
+  // Обработка ошибок из хуков
+  useEffect(() => {
+    if (profileError) {
+      showAlert("Ошибка", profileError);
     }
-  } catch (error) {
-    console.error('Error uploading avatar:', error);
-    showAlert("Ошибка", error.message || "Не удалось загрузить аватар");
-  } finally {
-    setIsLoading(false);
-  }
-};
+  }, [profileError]);
 
-  const pickImage = async () => {
-    // Запрашиваем разрешения
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      showAlert("Ошибка", "Нужно разрешение для доступа к галерее");
-      return;
-    }
-
-    let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
-
-    if (!result.canceled && result.assets[0].uri) {
-      // Сразу показываем новое изображение
-      setAvatar({ uri: result.assets[0].uri });
-      // Загружаем на сервер
-      await uploadAvatar(result.assets[0].uri);
+  const handleAvatarPick = async () => {
+    try {
+      const imageUri = await pickImage();
+      if (imageUri) {
+        // Сразу показываем новое изображение
+        setAvatar({ uri: imageUri });
+        // Загружаем на сервер через хук
+        await updateAvatar(imageUri);
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      showAlert("Ошибка", "Не удалось загрузить аватар");
     }
   };
 
-const updateUsername = async () => {
-  if (!username.trim()) {
-    showAlert("Ошибка", "Введите имя пользователя");
-    return false;
-  }
-
-  if (username === user?.username) {
-    return true; // Имя не изменилось
-  }
-
-  try {
-    const response = await apiClient.updateUsername(username.trim());
-
-    // Обновляем пользователя в контексте - используем updateUser
-    if (updateUser) {
-      updateUser({ username: username.trim() });
+  const handleUsernameUpdate = async () => {
+    if (!username.trim()) {
+      showAlert("Ошибка", "Введите имя пользователя");
+      return false;
     }
 
-    // ИЛИ альтернативно - полное обновление с сервера
-    // await updateUserData();
+    if (username === user?.username) {
+      return true; // Имя не изменилось
+    }
 
-    return true;
-  } catch (error) {
-    console.error('Error updating username:', error);
-    showAlert("Ошибка", error.message || "Не удалось обновить имя пользователя");
-    return false;
-  }
-};
+    try {
+      await updateUsername(username.trim());
+      return true;
+    } catch (error) {
+      console.error('Error updating username:', error);
+      showAlert("Ошибка", error.message || "Не удалось обновить имя пользователя");
+      return false;
+    }
+  };
 
-  // Функция обновления email
-const updateEmail = async (currentEmail, newEmail) => {
-  setCredentialsLoading(true);
-  try {
-    const response = await apiClient.updateEmail(currentEmail, newEmail);
-    showAlert("Успех", "Email успешно обновлен. Проверьте почту для подтверждения");
+  const handleEmailUpdate = async (currentEmail, newEmail) => {
+    setCredentialsLoading(true);
+    try {
+      await updateEmail(currentEmail, newEmail);
+      showAlert("Успех", "Email успешно обновлен. Проверьте почту для подтверждения");
+      return true;
+    } catch (error) {
+      console.error('Error updating email:', error);
+      showAlert("Ошибка", error.message || "Не удалось обновить email");
+      return false;
+    } finally {
+      setCredentialsLoading(false);
+    }
+  };
+
+  const handlePasswordUpdate = async (currentPassword, newPassword) => {
+    setCredentialsLoading(true);
+    try {
+      await updatePassword(currentPassword, newPassword);
+      showAlert("Успех", "Пароль успешно обновлен");
+      return true;
+    } catch (error) {
+      console.error('Error updating password:', error);
+      showAlert("Ошибка", error.message || "Не удалось обновить пароль");
+      return false;
+    } finally {
+      setCredentialsLoading(false);
+    }
+  };
+
+  const handleCredentialsSave = async (data) => {
+    console.log("Сохранение данных:", data);
     
-    // Обновляем данные пользователя в контексте
-    if (updateUser) {
-      updateUser({ email: newEmail });
+    let success = false;
+    
+    if (data.type === 'email') {
+      success = await handleEmailUpdate(data.currentEmail, data.newEmail);
+    } else {
+      success = await handlePasswordUpdate(data.currentPassword, data.newPassword);
     }
     
-    return true;
-  } catch (error) {
-    console.error('Error updating email:', error);
-    showAlert("Ошибка", error.message || "Не удалось обновить email");
-    return false;
-  } finally {
-    setCredentialsLoading(false);
-  }
-};
-
-  // Функция обновления пароля
-const updatePassword = async (currentPassword, newPassword) => {
-  setCredentialsLoading(true);
-  try {
-    const response = await apiClient.updatePassword(currentPassword, newPassword);
-    showAlert("Успех", "Пароль успешно обновлен");
-    return true;
-  } catch (error) {
-    console.error('Error updating password:', error);
-    showAlert("Ошибка", error.message || "Не удалось обновить пароль");
-    return false;
-  } finally {
-    setCredentialsLoading(false);
-  }
-};
-
-const handleCredentialsSave = async (data) => {
-  console.log("Сохранение данных:", data);
-  
-  let success = false;
-  
-  if (data.type === 'email') {
-    success = await updateEmail(data.currentEmail, data.newEmail);
-  } else {
-    success = await updatePassword(data.currentPassword, data.newPassword);
-  }
-  
-  if (success) {
-    // Закрываем модалку только при успешном обновлении
-    setCredentialsModalVisible(false);
-    
-    // Обновляем данные пользователя
-    if (updateUserData) {
-      await updateUserData();
+    if (success) {
+      // Закрываем модалку только при успешном обновлении
+      setCredentialsModalVisible(false);
+      
+      // Обновляем данные пользователя
+      if (updateUserData) {
+        await updateUserData();
+      }
     }
-  }
-};
+  };
 
   const openCredentialsModal = (type) => {
     setCredentialsModalType(type);
@@ -543,8 +601,8 @@ const handleCredentialsSave = async (data) => {
   const handleSaveChanges = async () => {
     setIsLoading(true);
     try {
-      // Сохраняем настройки уведомлений и приватности
-      await apiClient.updateSettings({
+      // Сохраняем настройки уведомлений и приватности через хук
+      await updateSettings({
         notifications: {
           likes: notifLikes,
           messages: notifMessages,
@@ -558,7 +616,7 @@ const handleCredentialsSave = async (data) => {
       });
 
       // Обновляем username если он изменился
-      const usernameUpdated = await updateUsername();
+      const usernameUpdated = await handleUsernameUpdate();
 
       if (usernameUpdated) {
         showAlert("Изменения сохранены", "Ваши настройки профиля успешно обновлены");
@@ -631,10 +689,10 @@ const handleCredentialsSave = async (data) => {
             <Image source={avatar} style={styles.avatar} />
             <TouchableOpacity
               style={[styles.changeAvatarBtn, { backgroundColor: theme.option }]}
-              onPress={pickImage}
-              disabled={isLoading}
+              onPress={handleAvatarPick}
+              disabled={isLoading || profileLoading}
             >
-              {isLoading ? (
+              {(isLoading || profileLoading) ? (
                 <ActivityIndicator size="small" color={theme.accent} />
               ) : (
                 <Text style={[styles.changeAvatarText, { color: theme.accent }]}>
@@ -900,6 +958,21 @@ const handleCredentialsSave = async (data) => {
 };
 
 const styles = StyleSheet.create({
+  passwordInputContainer: {
+    position: 'relative',
+  },
+  passwordInput: {
+    paddingRight: 50, // Место для иконки глаза
+  },
+eyeButton: {
+  position: 'absolute',
+  right: 12,
+  top: 0,
+  bottom: 0,
+  justifyContent: 'center',
+  alignItems: 'center',
+  width: 36,
+},
   container: { flex: 1 },
   header: { 
     flexDirection: "row", 
@@ -1127,13 +1200,12 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 16,
     fontSize: 16,
-    fontWeight: '500',
+    fontWeight: "500",
   },
   inputHint: {
     fontSize: 13,
-    marginTop: 6,
+    marginTop: 8,
     marginLeft: 4,
-    fontStyle: 'italic',
   },
 });
 

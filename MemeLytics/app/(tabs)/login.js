@@ -17,6 +17,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { useAuth } from '../../src/context/AuthContext';
 import LiquidEtherBackground from '../../components/LiquidEtherBackground';
+import CustomAlert from '../../components/CustomAlert';
 
 const LoginScreen = () => {
   const [email, setEmail] = useState('');
@@ -25,6 +26,25 @@ const LoginScreen = () => {
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const { login } = useAuth();
+ const [showPassword, setShowPassword] = useState(false);
+const [alertVisible, setAlertVisible] = useState(false);
+const [alertData, setAlertData] = useState({
+  title: '',
+  message: '',
+  buttons: []
+});
+
+const EyeIcon = ({ show, onPress }) => (
+    <TouchableOpacity
+      onPress={onPress}
+      style={styles.eyeButton}
+      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+    >
+      <Text style={styles.eyeIcon}>
+        {show ? '🙈' : '🙉'}
+      </Text>
+    </TouchableOpacity>
+  );
 
   useEffect(() => {
     const timer = setTimeout(() => setIsReady(true), 300);
@@ -82,13 +102,52 @@ const handleLogin = async () => {
   if (!isValid) return;
 
   try {
-    // Вызываем реальный логин через API
     await login({ email, password });
     router.replace('/');
   } catch (error) {
-    console.error('Login error:', error);
-    alert('Ошибка входа: ' + error.message);
+  console.error('Login error:', error);
+
+  let errorMessage = error.message || 'Неизвестная ошибка';
+
+  // Ошибка: пользователь не найден
+  if (
+    errorMessage.includes('Пользователь не найден') ||
+    errorMessage.includes('User not found')
+  ) {
+    setAlertData({
+      title: 'Пользователь не найден',
+      message: 'Аккаунт с таким email не существует.\nПроверьте email или зарегистрируйтесь.',
+      buttons: [
+        { text: 'Зарегистрироваться', onPress: () => setTimeout(() => router.push('/Stepper'), 200) },
+        { text: 'OK' }
+      ]
+    });
+    setAlertVisible(true);
+    return;
   }
+
+  // Ошибка: неверный пароль
+  if (
+    errorMessage.includes('Неверный email или пароль') ||
+    errorMessage.includes('Invalid credentials')
+  ) {
+    setAlertData({
+      title: 'Неверный пароль',
+      message: 'Проверьте правильность введённого пароля.',
+      buttons: [{ text: 'OK' }]
+    });
+    setAlertVisible(true);
+    return;
+  }
+
+  // Прочие ошибки
+  setAlertData({
+    title: 'Ошибка входа',
+    message: `Не удалось войти: ${errorMessage}`,
+    buttons: [{ text: 'OK' }]
+  });
+  setAlertVisible(true);
+}
 };
 
   const handleBack = () => {
@@ -151,17 +210,20 @@ const handleLogin = async () => {
                     </View>
                     {emailError ? <Text style={styles.errorText}>{emailError}</Text> : null}
                     
-                    {/* Поле Пароль */}
-                    <View style={[styles.inputWrapper, passwordError && styles.inputWrapperError]}>
-                      <TextInput
-                        style={styles.input}
-                        placeholder="Пароль"
-                        placeholderTextColor="#7C8599"
-                        value={password}
-                        onChangeText={handlePasswordChange}
-                        secureTextEntry
-                      />
-                    </View>
+    <View style={[styles.inputWrapper, passwordError && styles.inputWrapperError]}>
+      <TextInput
+        style={[styles.input, { paddingRight: 50 }]}
+        placeholder="Пароль"
+        placeholderTextColor="#7C8599"
+        value={password}
+        onChangeText={handlePasswordChange}
+        secureTextEntry={!showPassword}
+      />
+      <EyeIcon 
+        show={showPassword} 
+        onPress={() => setShowPassword(!showPassword)} 
+      />
+    </View>
                     {passwordError ? <Text style={styles.errorText}>{passwordError}</Text> : null}
 
                     {/* Кнопка входа */}
@@ -193,6 +255,13 @@ const handleLogin = async () => {
             </View>
           </SafeAreaView>
         )}
+        <CustomAlert
+  visible={alertVisible}
+  title={alertData.title}
+  message={alertData.message}
+  buttons={alertData.buttons}
+  onClose={() => setAlertVisible(false)}
+/>
       </View>
     </SafeAreaProvider>
   );
@@ -202,6 +271,19 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0F111E',
+  },
+  eyeButton: {
+    position: 'absolute',
+    right: 12,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 36,
+  },
+  eyeIcon: {
+    fontSize: 20,
+    color: '#7C8599',
   },
   backgroundContainer: {
     position: 'absolute',

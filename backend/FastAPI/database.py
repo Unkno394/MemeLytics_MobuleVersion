@@ -1,10 +1,9 @@
 # database.py
 from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-import models
+from models import Base
 
-SQLALCHEMY_DATABASE_URL = "sqlite:///./meme_app.db"
+SQLALCHEMY_DATABASE_URL = "sqlite:///./meme.db"
 
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL, 
@@ -12,8 +11,6 @@ engine = create_engine(
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-Base = declarative_base()
 
 def get_db():
     db = SessionLocal()
@@ -23,8 +20,5 @@ def get_db():
         db.close()
 
 def create_tables():
-    # Импортируем все модели чтобы они были зарегистрированы
-    import models
-    # Создаем все таблицы
-    models.Base.metadata.create_all(bind=engine)
-    print("Database tables created successfully!")
+    Base.metadata.create_all(bind=engine)
+    print("✅ Database tables created successfully")

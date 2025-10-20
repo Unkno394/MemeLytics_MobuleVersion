@@ -6,6 +6,7 @@ import * as SplashScreen from "expo-splash-screen";
 import * as Font from "expo-font";
 import { ThemeProvider } from "../src/context/ThemeContext";
 import { AuthProvider } from "../src/context/AuthContext";
+import { PostProvider } from "../src/context/PostContext";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 
 SplashScreen.preventAutoHideAsync();
@@ -49,7 +50,9 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <AuthProvider>
         <ThemeProvider>
-          <RootLayoutContent />
+          <PostProvider>
+            <RootLayoutContent />
+          </PostProvider>
         </ThemeProvider>
       </AuthProvider>
     </GestureHandlerRootView>

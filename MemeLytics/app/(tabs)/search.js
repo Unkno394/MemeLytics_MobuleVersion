@@ -9,11 +9,14 @@ import {
   ScrollView,
   Image,
   RefreshControl,
+  Text,
+  FlatList,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import Svg, { Path, Defs, LinearGradient as SvgLinearGradient, Stop } from "react-native-svg";
 import { ThemeContext } from "../../src/context/ThemeContext";
 import { router } from 'expo-router';
+import { apiClient } from '../../api/client';
 
 const { width } = Dimensions.get("window");
 const STEP = 70;
@@ -272,12 +275,48 @@ const MasonryGrid = React.memo(({ memes, isDark }) => {
   );
 });
 
+// User Item Component
+const UserItem = React.memo(({ user, isDark, theme }) => {
+  const handleUserPress = useCallback(() => {
+    router.push({
+      pathname: '/profile',
+      params: { userId: user.id }
+    });
+  }, [user.id]);
+
+  return (
+    <TouchableOpacity 
+      style={[styles.userItem, { backgroundColor: isDark ? "#1A1B30" : "#FFFFFF" }]}
+      onPress={handleUserPress}
+    >
+      <Image 
+        source={user.avatar_url ? { uri: user.avatar_url } : require("../../src/assets/cool_avatar.jpg")} 
+        style={styles.userAvatar}
+      />
+      <View style={styles.userInfo}>
+        <Text style={[styles.userName, { color: isDark ? "#FFFFFF" : "#1B1F33" }]}>
+          {user.username}
+        </Text>
+        <Text style={[styles.userStats, { color: isDark ? "#A3B7D2" : "#64748B" }]}>
+          {user.followers_count || 0} подписчиков • {user.following_count || 0} подписок
+        </Text>
+      </View>
+    </TouchableOpacity>
+  );
+});
+
 const SearchScreen = () => {
   const { isDark } = useContext(ThemeContext);
   const [query, setQuery] = useState("");
   const [activeTab, setActiveTab] = useState("search");
   const [isInputFocused, setIsInputFocused] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [searchType, setSearchType] = useState("memes"); // "memes" или "users"
+  const [searchResults, setSearchResults] = useState({
+    memes: [],
+    users: []
+  });
+  const [isSearching, setIsSearching] = useState(false);
   
   const initialActive = "search";
   const tabs = useMemo(() => [
@@ -307,6 +346,9 @@ const SearchScreen = () => {
         indicatorGradient: ["#00DEE8", "#77EE5F"],
         activeIcon: "#FFFFFF",
         inactiveIcon: "#1FD3B9",
+        accent: "#16DBBE",
+        tabInactive: "#2A2B42",
+        secondaryText: "#A3B7D2",
       }
     : {
         background: "#EAF0FF",
@@ -318,6 +360,9 @@ const SearchScreen = () => {
         indicatorGradient: ["#00BFA6", "#5CE1E6"],
         activeIcon: "#1FD3B9",
         inactiveIcon: "#7C8599",
+        accent: "#16A085",
+        tabInactive: "#D6E2F5",
+        secondaryText: "#64748B",
       }, [isDark]);
 
   // Search icon animation
@@ -419,31 +464,141 @@ const SearchScreen = () => {
     navigateTo(tabId);
   }, [navigateTo]);
 
-  // Search handler
-  const handleSearch = useCallback(() => {
-    if (query.trim()) {
-      console.log("Searching for:", query);
-      // Search logic here
+ const handleSearch = useCallback(async () => {
+  if (query.trim()) {
+    console.log("Searching for:", query, "type:", searchType);
+    setIsSearching(true);
+    try {
+      if (searchType === "memes") {
+        const results = await apiClient.request(`/search/memes?q=${encodeURIComponent(query)}`);
+        console.log("🔍 Search results:", results);
+        setSearchResults(prev => ({ ...prev, memes: results }));
+      } else {
+        const results = await apiClient.request(`/search/users?q=${encodeURIComponent(query)}`);
+        console.log("🔍 User search results:", results);
+        setSearchResults(prev => ({ ...prev, users: results }));
+      }
+    } catch (error) {
+      console.error("Search error:", error);
+      setSearchResults({ memes: [], users: [] });
+    } finally {
+      setIsSearching(false);
     }
-  }, [query]);
+  } else {
+    setSearchResults({ memes: [], users: [] });
+  }
+}, [query, searchType]);
+
+// Также обнови MasonryGrid компонент для работы с реальными данными API:
+const MasonryGrid = React.memo(({ memes, isDark }) => {
+  const columnWidth = (width - 24) / 2;
+  const columns = [[], []];
+  const columnHeights = [0, 0];
+
+  // Используем реальные данные из API
+  const processedMemes = memes.map(meme => ({
+    ...meme,
+    uri: meme.image_url, // используем image_url из API
+    id: meme.id.toString(),
+    height: meme.height || 200 + Math.random() * 200 // используем реальную высоту или случайную
+  }));
+
+  processedMemes.forEach((meme) => {
+    const shortestColumnIndex = columnHeights[0] <= columnHeights[1] ? 0 : 1;
+    columns[shortestColumnIndex].push(meme);
+    columnHeights[shortestColumnIndex] += meme.height;
+  });
+
+  const handleMemePress = useCallback((meme) => {
+    router.push({
+      pathname: '/post-detail',
+      params: {
+        postId: meme.id,
+        imageUri: meme.image_url,
+        description: meme.description || "",
+        author: meme.owner_id?.toString() || '1',
+        postType: 'otherPost'
+      }
+    });
+  }, []);
+
+  const styles = useMemo(() => createMasonryStyles(isDark), [isDark]);
+
+  return (
+    <View style={styles.masonryContainer}>
+      {columns.map((column, columnIndex) => (
+        <View key={columnIndex} style={styles.column}>
+          {column.map((meme) => (
+            <TouchableOpacity 
+              key={meme.id} 
+              style={[styles.memeItem, { width: columnWidth }]}
+              onPress={() => handleMemePress(meme)}
+            >
+              <Image
+                source={{ uri: meme.image_url }}
+                style={[styles.memeImage, { height: meme.height }]}
+                resizeMode="cover"
+              />
+            </TouchableOpacity>
+          ))}
+        </View>
+      ))}
+    </View>
+  );
+});
 
   // Input focus/blur handlers
   const handleFocus = useCallback(() => setIsInputFocused(true), []);
   const handleBlur = useCallback(() => setIsInputFocused(false), []);
 
-  // Memoized search data
-  const memes = useMemo(() => 
-    Array.from({ length: 20 }).map((_, i) => ({
-      uri: `https://picsum.photos/300/${300 + Math.random() * 300}?random=${i}`,
-      id: i.toString(),
-      height: 200 + Math.random() * 200,
-    })), []);
+  // Render search results
+  const renderSearchResults = useCallback(() => {
+    if (!query.trim()) {
+      return (
+        <View style={styles.emptyState}>
+          <Text style={[styles.emptyStateText, { color: theme.secondaryText }]}>
+            Введите запрос для поиска
+          </Text>
+        </View>
+      );
+    }
 
-  // Memoized masonry grid
-  const renderedGrid = useMemo(() => 
-    <MasonryGrid memes={memes} isDark={isDark} />, 
-    [memes, isDark]
-  );
+    if (isSearching) {
+      return (
+        <View style={styles.emptyState}>
+          <Text style={[styles.emptyStateText, { color: theme.secondaryText }]}>
+            Поиск...
+          </Text>
+        </View>
+      );
+    }
+
+    const currentResults = searchType === "memes" ? searchResults.memes : searchResults.users;
+    
+    if (currentResults.length === 0 && query.trim()) {
+      return (
+        <View style={styles.emptyState}>
+          <Text style={[styles.emptyStateText, { color: theme.secondaryText }]}>
+            {searchType === "memes" ? "Мемы не найдены" : "Пользователи не найдены"}
+          </Text>
+        </View>
+      );
+    }
+
+    if (searchType === "memes") {
+      return <MasonryGrid memes={currentResults} isDark={isDark} />;
+    } else {
+      return (
+        <FlatList
+          data={currentResults}
+          renderItem={({ item }) => <UserItem user={item} isDark={isDark} theme={theme} />}
+          keyExtractor={(item) => item.id.toString()}
+          style={styles.usersList}
+          showsVerticalScrollIndicator={false}
+        />
+      );
+    }
+  }, [query, isSearching, searchType, searchResults, isDark, theme]);
 
   const styles = useMemo(() => createStyles(theme, isDark), [theme, isDark]);
 
@@ -471,17 +626,49 @@ const SearchScreen = () => {
           ref={inputRef}
           value={query}
           onChangeText={setQuery}
-          placeholder="Поиск мемов..."
+          placeholder={searchType === "memes" ? "Поиск мемов..." : "Поиск пользователей..."}
           placeholderTextColor={theme.placeholder}
           style={[styles.input, { marginLeft: 40, color: theme.inputText }]}
           onFocus={handleFocus}
           onBlur={handleBlur}
           onSubmitEditing={handleSearch}
           returnKeyType="search"
-          multiline={true}
-          numberOfLines={2}
-          maxLength={100}
         />
+      </View>
+
+      {/* Search Type Tabs */}
+      <View style={styles.searchTypeTabs}>
+        <TouchableOpacity
+          style={[
+            styles.searchTypeTab,
+            searchType === "memes" && styles.searchTypeTabActive,
+            { backgroundColor: searchType === "memes" ? theme.accent : theme.tabInactive }
+          ]}
+          onPress={() => setSearchType("memes")}
+        >
+          <Text style={[
+            styles.searchTypeText,
+            { color: searchType === "memes" ? (isDark ? "#0F111E" : "#FFFFFF") : theme.secondaryText }
+          ]}>
+            Мемы
+          </Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity
+          style={[
+            styles.searchTypeTab,
+            searchType === "users" && styles.searchTypeTabActive,
+            { backgroundColor: searchType === "users" ? theme.accent : theme.tabInactive }
+          ]}
+          onPress={() => setSearchType("users")}
+        >
+          <Text style={[
+            styles.searchTypeText,
+            { color: searchType === "users" ? (isDark ? "#0F111E" : "#FFFFFF") : theme.secondaryText }
+          ]}>
+            Пользователи
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {/* Search Results */}
@@ -499,8 +686,7 @@ const SearchScreen = () => {
           />
         }
       >
-        
-        {renderedGrid}
+        {renderSearchResults()}
       </ScrollView>
 
       {/* Bottom Navigation */}
@@ -564,7 +750,6 @@ const createStyles = (theme, isDark) => StyleSheet.create({
     marginLeft: 8,
     fontSize: 16,
     paddingRight: 50,
-    textAlignVertical: 'top',
   },
   searchIconContainer: {
     position: "absolute",
@@ -574,11 +759,73 @@ const createStyles = (theme, isDark) => StyleSheet.create({
   searchIconButton: {
     padding: 4,
   },
+  searchTypeTabs: {
+    flexDirection: "row",
+    marginHorizontal: 12,
+    marginBottom: 12,
+    gap: 8,
+  },
+  searchTypeTab: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 10,
+    alignItems: "center",
+  },
+  searchTypeTabActive: {
+    // Стили для активной вкладки
+  },
+  searchTypeText: {
+    fontWeight: "600",
+    fontSize: 14,
+  },
   scrollView: {
     flex: 1,
   },
   scrollViewContent: {
     paddingBottom: 100,
+    flexGrow: 1,
+  },
+  emptyState: {
+    flex: 1,
+    padding: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyStateText: {
+    fontSize: 16,
+    textAlign: 'center',
+  },
+  usersList: {
+    paddingHorizontal: 12,
+  },
+  userItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  userAvatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    marginRight: 12,
+  },
+  userInfo: {
+    flex: 1,
+  },
+  userName: {
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: 4,
+  },
+  userStats: {
+    fontSize: 12,
   },
   navigationWrapper: { 
     position: "absolute", 

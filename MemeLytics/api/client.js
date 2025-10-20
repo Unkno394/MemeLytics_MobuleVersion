@@ -19,7 +19,9 @@ class ApiClient {
       return null;
     }
   }
-
+async getFeaturedMemes() {
+  return this.request('/feed/featured');
+}
   async setToken(token) {
     try {
       await AsyncStorage.setItem(this.tokenKey, token);
@@ -36,64 +38,164 @@ class ApiClient {
     }
   }
 
+ translateError = (errorMessage) => {
+  const errorTranslations = {
+    // Auth errors
+    "Invalid credentials": "Неверный email или пароль",
+    "Email already registered": "Этот email уже зарегистрирован",
+    "Invalid token": "Недействительный токен",
+    "User not found": "Пользователь не найден",
+    
+    // Profile update errors
+    "Username already taken": "Такой ник уже занят",
+    "Current email is incorrect": "Текущий email указан неверно",
+    "New email cannot be the same as current email": "Новый email не должен совпадать с текущим",
+    "Email already registered": "Этот email уже используется другим пользователем",
+    "Current password is incorrect": "Старый пароль указан неверно",
+    "New password cannot be the same as current password": "Придумайте НОВЫЙ ПАРОЛЬ!",
+    "New password must be at least 6 characters long": "Новый пароль должен содержать минимум 6 символов",
+    "All fields are required": "Заполните все поля",
+    
+    // File errors
+    "File must be an image": "Файл должен быть изображением",
+    
+    // Registration errors
+    "Error during registration": "Ошибка при регистрации",
+    "email already registered": "Этот email уже зарегистрирован", 
+    "username already taken": "Этот никнейм уже занят",
+    
+    // Generic errors
+    "Error during login": "Ошибка при входе",
+    "Error updating username": "Ошибка при обновлении имени",
+    "Error updating email": "Ошибка при обновлении email",
+    "Error updating password": "Ошибка при обновлении пароля",
+    "Error uploading avatar": "Ошибка при загрузке аватара",
+    "Error updating settings": "Ошибка при обновлении настроек",
+    "Internal Server Error": "Внутренняя ошибка сервера",
+    "Not Found": "Ресурс не найден",
+    "Unauthorized": "Не авторизован"
+  };
+
+  // Убираем лишние символы для более точного сравнения
+  const cleanErrorMessage = errorMessage.replace(/[:]/g, '').trim();
+  
+  // Сначала ищем ТОЧНОЕ совпадение (самые конкретные ошибки)
+  if (errorTranslations[errorMessage]) {
+    return errorTranslations[errorMessage];
+  }
+
+  // Затем ищем совпадение с очищенной строкой
+  if (errorTranslations[cleanErrorMessage]) {
+    return errorTranslations[cleanErrorMessage];
+  }
+
+  // Затем ищем частичное совпадение
+  const errorMsgLower = errorMessage.toLowerCase();
+  const cleanErrorMsgLower = cleanErrorMessage.toLowerCase();
+  
+  for (const [key, value] of Object.entries(errorTranslations)) {
+    const keyLower = key.toLowerCase();
+    
+    // Проверяем частичное совпадение в оригинальной и очищенной строке
+    if (errorMsgLower.includes(keyLower) || cleanErrorMsgLower.includes(keyLower)) {
+      return value;
+    }
+  }
+
+  // Если перевод не найден, возвращаем общую ошибку с оригинальным сообщением
+  return `Произошла ошибка: ${errorMessage}`;
+}
   // -----------------------
   // Основной запрос
   // -----------------------
-  async request(endpoint, options = {}) {
-    const url = `${this.baseURL}${endpoint}`;
-    const token = await this.getToken();
+async request(endpoint, options = {}) {
+  const url = `${this.baseURL}${endpoint}`;
+  const token = await this.getToken();
 
-    const headers = {
-      ...options.headers,
-    };
+  console.log(`🌐 API Request: ${options.method || 'GET'} ${url}`);
+  if (options.body && !(options.body instanceof FormData)) {
+    console.log('📦 Request body:', options.body);
+  }
 
-    if (!(options.body instanceof FormData)) {
-      headers['Content-Type'] = 'application/json';
-    }
+  const headers = {
+    ...options.headers,
+  };
 
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
-    }
+  if (!(options.body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json';
+  }
 
-    const fetchOptions = {
-      method: options.method || 'GET',
-      headers,
-    };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
 
-    if (options.body) {
-      fetchOptions.body = options.body instanceof FormData ? options.body : JSON.stringify(options.body);
-    }
+  const fetchOptions = {
+    method: options.method || 'GET',
+    headers,
+  };
 
+  if (options.body) {
+    fetchOptions.body = options.body instanceof FormData ? options.body : JSON.stringify(options.body);
+  }
+
+  try {
+    const response = await fetch(url, fetchOptions);
+    const text = await response.text();
+    let data;
     try {
-      const response = await fetch(url, fetchOptions);
-      const text = await response.text();
-      let data;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        data = text;
+      data = JSON.parse(text);
+    } catch {
+      data = text;
+    }
+
+    console.log(`📥 API Response: ${response.status}`, data);
+
+    if (!response.ok) {
+      // Если 401, очищаем токен
+      if (response.status === 401) {
+        await this.removeToken();
       }
 
-      if (!response.ok) {
-        // Если 401, очищаем токен
-        if (response.status === 401) {
-          await this.removeToken();
+      let errorMessage = `HTTP error! status: ${response.status}`;
+      
+      // Улучшенная обработка различных форматов ошибок
+      if (data && data.detail) {
+        errorMessage = data.detail;
+      } else if (data && data.message) {
+        errorMessage = data.message;
+      } else if (data && data.error) {
+        errorMessage = data.error;
+      } else if (typeof data === 'string' && data) {
+        errorMessage = data;
+      } else if (data && typeof data === 'object') {
+        // Попробуем найти любую строку с ошибкой в объекте
+        const errorString = JSON.stringify(data);
+        if (errorString.includes('error') || errorString.includes('Error')) {
+          errorMessage = errorString;
         }
-
-        let errorMessage = `HTTP error! status: ${response.status}`;
-        if (data && data.detail) errorMessage = data.detail;
-        else if (data && typeof data === 'object') errorMessage = data.message || JSON.stringify(data);
-        else if (typeof data === 'string') errorMessage = data;
-
-        throw new Error(errorMessage);
       }
 
-      return data;
-    } catch (error) {
-      console.error('API Request failed:', error);
+      console.error(`❌ API Error [${response.status}]:`, errorMessage);
+      
+      // Переводим ошибку на русский
+      const translatedError = this.translateError(errorMessage);
+      throw new Error(translatedError);
+    }
+
+    return data;
+  } catch (error) {
+    console.error('❌ API Request failed:', error);
+    
+    // Если ошибка уже переведена, просто пробрасываем её
+    if (error.message && this.translateError(error.message) !== error.message) {
       throw error;
     }
+    
+    // Переводим оригинальную ошибку
+    const translatedError = this.translateError(error.message);
+    throw new Error(translatedError);
   }
+}
 
   // -----------------------
   // Auth & User
@@ -167,6 +269,20 @@ class ApiClient {
 
   async updateSettings(settings) {
     return this.request('/users/settings', { method: 'PUT', body: settings });
+  }
+
+  // -----------------------
+  // Post methods
+  // -----------------------
+async createPost(formData) {
+  return this.request('/memes', { 
+    method: 'POST', 
+    body: formData 
+  });
+}
+
+  async getPost(postId) {
+    return this.request(`/memes/${postId}`);
   }
 }
 

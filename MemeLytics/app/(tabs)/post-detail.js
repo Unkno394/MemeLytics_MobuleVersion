@@ -28,13 +28,12 @@ import { modalConfigs } from "../../constants/modalConfigs";
 import CustomAlert from '../../components/CustomAlert';
 import { KeyboardAvoidingView, Platform, TouchableWithoutFeedback, Keyboard } from "react-native";
 import CoolAvatar from "../../src/assets/cool_avatar.jpg";
-
-
+import { useAuth } from "../../src/context/AuthContext";
 
 const { width, height } = Dimensions.get("window");
 const STATUS_BAR_HEIGHT = StatusBar.currentHeight || 0;
 
-// === Исправленный EmojiText (чтобы эмодзи были на одной линии с текстом) ===
+// === Исправленный EmojiText ===
 const UNSUPPORTED_EMOJIS = new Set(["™️", "©️", "®️"]);
 
 function makeCodePoints(emoji) {
@@ -48,7 +47,7 @@ const EmojiText = React.memo(({ text, style }) => {
 
   const parts = Array.from(text);
   const fontSize = style?.fontSize || 16;
-  const emojiSize = fontSize * 1.1; // чуть больше, как системные emoji
+  const emojiSize = fontSize * 1.1;
 
   return (
     <Text style={[style, { flexWrap: "nowrap" }]}>
@@ -78,7 +77,6 @@ const EmojiText = React.memo(({ text, style }) => {
   );
 });
 
-
 const BackIcon = ({ color = "#16DBBE" }) => (
   <Svg width={24} height={24} viewBox="0 0 24 24" fill="none">
     <Path
@@ -91,7 +89,7 @@ const BackIcon = ({ color = "#16DBBE" }) => (
   </Svg>
 );
 
-// ===== Кастомный TextInput с Twemoji КАК В [id].js =====
+// ===== Кастомный TextInput с Twemoji =====
 const EmojiTextInput = ({ value, onChangeText, placeholder, style, theme }) => {
   const localStyles = StyleSheet.create({
     textInputContainer: {
@@ -119,7 +117,6 @@ const EmojiTextInput = ({ value, onChangeText, placeholder, style, theme }) => {
 
   return (
     <View style={[localStyles.textInputContainer, style]}>
-      {/* Всегда отображаем Twemoji */}
       {value ? (
         <EmojiText 
           text={value} 
@@ -131,13 +128,11 @@ const EmojiTextInput = ({ value, onChangeText, placeholder, style, theme }) => {
           ]} 
         />
       ) : (
-        // Показываем placeholder когда пусто
         <Text style={[localStyles.textInputContent, { color: theme.inputPlaceholder }]}>
           {placeholder}
         </Text>
       )}
       
-      {/* Прозрачный TextInput для ввода */}
       <TextInput
         style={localStyles.hiddenInput}
         value={value}
@@ -151,6 +146,7 @@ const EmojiTextInput = ({ value, onChangeText, placeholder, style, theme }) => {
 
 const PostDetail = () => {
   const { isDark } = useContext(ThemeContext);
+  const { user } = useAuth();
   const params = useLocalSearchParams();
 
   const [isLiked, setIsLiked] = useState(false);
@@ -174,9 +170,18 @@ const PostDetail = () => {
   const [shareComment, setShareComment] = useState("");
   const [selectedUser, setSelectedUser] = useState(null);
 
-  // Получаем тип поста из параметров навигации
-  const { postType = 'otherPost', postId, imageUri } = params;
-
+  // Получаем данные из параметров
+  const { 
+    postType = 'otherPost', 
+    postId, 
+    imageUri,
+    description = "", 
+    author = user?.username || 'uliterallylovethis'
+  } = params;
+  useEffect(() => {
+    console.log('📝 Полученное описание:', description);
+    console.log('🖼️ Полученный imageUri:', imageUri);
+  }, [description, imageUri]);
   // Анимация сердечка
   const scaleAnim = useRef(new Animated.Value(0)).current;
 
@@ -207,7 +212,9 @@ const PostDetail = () => {
     inputText: isDark ? "#FFF" : "#000",
     inputPlaceholder: isDark ? "#666" : "#999",
   };
-
+useEffect(() => {
+    console.log('📋 Параметры в post-detail:', params);
+  }, [params]);
   const showAlert = (title, message, buttons) => {
     setAlertConfig({ title, message, buttons });
     setAlertVisible(true);
@@ -362,16 +369,16 @@ const PostDetail = () => {
       showError('Не удалось скачать изображение');
     }
   };
-
-  const handleEdit = () => {
-    router.push({
-      pathname: '/create',
-      params: { 
-        editMode: 'true',
-        imageUri: imageUri || Image.resolveAssetSource(CoolAvatar).uri
-      }
-    });
-  };
+const handleEdit = () => {
+  router.push({
+    pathname: '/create',
+    params: { 
+      editMode: 'true',
+      imageUri: imageUri || Image.resolveAssetSource(CoolAvatar).uri,
+      description: description || "" // Гарантируем строку
+    }
+  });
+};
 
   const handleDelete = () => {
     showConfirm(
@@ -411,7 +418,8 @@ const PostDetail = () => {
       params: { 
         postId: postId || '123',
         postImage: imageUri || Image.resolveAssetSource(CoolAvatar).uri,
-        author: 'uliterallylovethis'
+        author: author,
+        description: description
       }
     });
   };
@@ -431,7 +439,8 @@ const PostDetail = () => {
       to: selectedUser,
       comment: shareComment,
       postId: postId,
-      image: imageUri || Image.resolveAssetSource(CoolAvatar).uri
+      image: imageUri || Image.resolveAssetSource(CoolAvatar).uri,
+      description: description
     });
 
     showSuccess(`Пост отправлен ${selectedUser.name}`);
@@ -473,18 +482,20 @@ const PostDetail = () => {
   );
 
   useEffect(() => {
-    const source = Image.resolveAssetSource(CoolAvatar);
+    const source = imageUri ? { uri: imageUri } : CoolAvatar;
     Image.getSize(
-      source.uri,
+      imageUri || Image.resolveAssetSource(CoolAvatar).uri,
       (imgWidth, imgHeight) => {
         const scaleFactor = width * 0.95 / imgWidth;
         setImageHeight(imgHeight * scaleFactor);
       },
       (error) => {
         console.log("Ошибка при получении размеров изображения", error);
+        // Устанавливаем высоту по умолчанию
+        setImageHeight(300);
       }
     );
-  }, []);
+  }, [imageUri]);
 
   const styles = StyleSheet.create({
     container: { 
@@ -527,22 +538,19 @@ const PostDetail = () => {
       padding: 16,
       width: width * 0.95,
     },
-commentSection: {
-  marginBottom: 10,
-},
-
-popularEmojiRow: {
-  flexDirection: "row",
-  alignItems: "center",
-  paddingVertical: 6,
-  paddingHorizontal: 8,
-  gap: 10,
-},
-
-emojiButton: {
-  padding: 4,
-},
-
+    commentSection: {
+      marginBottom: 10,
+    },
+    popularEmojiRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingVertical: 6,
+      paddingHorizontal: 8,
+      gap: 10,
+    },
+    emojiButton: {
+      padding: 4,
+    },
     descriptionText: {
       color: theme.text,
       fontSize: 15,
@@ -760,14 +768,19 @@ emojiButton: {
             </Animated.View>
           </TouchableOpacity>
 
-          <View style={styles.descriptionWrapper}>
+                <View style={styles.descriptionWrapper}>
+          {/* Показываем описание только если оно есть */}
+          {description ? (
             <EmojiText 
-              text="✨Очень крутой дизайн ногтей в стиле chrome + стразы!"
+              text={description}
               style={[styles.descriptionText, { color: theme.text }]}
             />
-            <Text style={[styles.authorText, { color: theme.secondaryText }]}>Выложил: uliterallylovethis</Text>
-          </View>
-        </ScrollView>
+          ) : null}
+          <Text style={[styles.authorText, { color: theme.secondaryText }]}>
+            Выложил: {author}
+          </Text>
+        </View>
+      </ScrollView>
 
         <ActionModal
           visible={isModalVisible}
@@ -784,88 +797,84 @@ emojiButton: {
           theme={theme}
         />
 
-       <Modal
-  visible={isShareModalVisible}
-  animationType="slide"
-  transparent={true}
-  onRequestClose={closeShareModal}
-  statusBarTranslucent={true}
->
-  <KeyboardAvoidingView
-    behavior={Platform.OS === "ios" ? "padding" : "height"}
-    style={{ flex: 1 }}
-  >
-    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-      <SafeAreaView style={styles.modalOverlay}>
-        <View style={styles.shareModal}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>Отправить пост</Text>
-            <TouchableOpacity onPress={closeShareModal}>
-              <Text style={{ color: '#16DBBE', fontSize: 18, fontWeight: 'bold' }}>✕</Text>
-            </TouchableOpacity>
-          </View>
-
-          <FlatList
-            data={mockUsers}
-            renderItem={renderUserItem}
-            keyExtractor={(item) => item.id}
-            style={styles.usersList}
-            showsVerticalScrollIndicator={false}
-          />
-
-          {/* === БЛОК ВВОДА КОММЕНТАРИЯ === */}
-          <View style={styles.commentSection}>
-            <View style={styles.commentInputContainer}>
-              <EmojiTextInput
-                value={shareComment}
-                onChangeText={setShareComment}
-                placeholder="Добавьте комментарий..."
-                theme={{
-                  inputText: theme.text,
-                  inputPlaceholder: theme.secondaryText,
-                }}
-              />
-            </View>
-
-            {/* === РЯД ЭМОДЗИ ПОД ИНПУТОМ === */}
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.popularEmojiRow}
-            >
-              {['😂', '🤣', '🥰', '😍', '😭', '😎', '🔥'].map((emoji, i) => (
-                <TouchableOpacity
-                  key={i}
-                  onPress={() => setShareComment((prev) => (prev || "") + emoji)}
-                  style={styles.emojiButton}
-                >
-                  <Twemoji emoji={emoji} size={30} />
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-
-          {/* КНОПКА ОТПРАВИТЬ */}
-          <TouchableOpacity
-            style={[
-              styles.sendButton,
-              !selectedUser && styles.sendButtonDisabled,
-            ]}
-            onPress={handleShareSubmit}
-            disabled={!selectedUser}
+        <Modal
+          visible={isShareModalVisible}
+          animationType="slide"
+          transparent={true}
+          onRequestClose={closeShareModal}
+          statusBarTranslucent={true}
+        >
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={{ flex: 1 }}
           >
-            <Text style={styles.sendButtonText}>
-              {selectedUser
-                ? `Отправить ${selectedUser.name}`
-                : "Выберите получателя"}
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    </TouchableWithoutFeedback>
-  </KeyboardAvoidingView>
-</Modal>
+            <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+              <SafeAreaView style={styles.modalOverlay}>
+                <View style={styles.shareModal}>
+                  <View style={styles.modalHeader}>
+                    <Text style={styles.modalTitle}>Отправить пост</Text>
+                    <TouchableOpacity onPress={closeShareModal}>
+                      <Text style={{ color: '#16DBBE', fontSize: 18, fontWeight: 'bold' }}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
 
+                  <FlatList
+                    data={mockUsers}
+                    renderItem={renderUserItem}
+                    keyExtractor={(item) => item.id}
+                    style={styles.usersList}
+                    showsVerticalScrollIndicator={false}
+                  />
+
+                  <View style={styles.commentSection}>
+                    <View style={styles.commentInputContainer}>
+                      <EmojiTextInput
+                        value={shareComment}
+                        onChangeText={setShareComment}
+                        placeholder="Добавьте комментарий..."
+                        theme={{
+                          inputText: theme.text,
+                          inputPlaceholder: theme.secondaryText,
+                        }}
+                      />
+                    </View>
+
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.popularEmojiRow}
+                    >
+                      {['😂', '🤣', '🥰', '😍', '😭', '😎', '🔥'].map((emoji, i) => (
+                        <TouchableOpacity
+                          key={i}
+                          onPress={() => setShareComment((prev) => (prev || "") + emoji)}
+                          style={styles.emojiButton}
+                        >
+                          <Twemoji emoji={emoji} size={30} />
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.sendButton,
+                      !selectedUser && styles.sendButtonDisabled,
+                    ]}
+                    onPress={handleShareSubmit}
+                    disabled={!selectedUser}
+                  >
+                    <Text style={styles.sendButtonText}>
+                      {selectedUser
+                        ? `Отправить ${selectedUser.name}`
+                        : "Выберите получателя"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </SafeAreaView>
+            </TouchableWithoutFeedback>
+          </KeyboardAvoidingView>
+        </Modal>
 
         <CustomAlert
           visible={alertVisible}

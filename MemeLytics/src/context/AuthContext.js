@@ -9,26 +9,47 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [token, setToken] = useState(null);
+  const [isAuthChecked, setIsAuthChecked] = useState(false);
 
   // Загрузка токена и пользователя при старте приложения
   useEffect(() => {
     const loadAuthData = async () => {
       try {
+        console.log('🔄 Загружаем данные аутентификации...');
         const storedToken = await AsyncStorage.getItem('userToken');
+        
         if (storedToken) {
+          console.log('✅ Токен найден в хранилище');
           setToken(storedToken);
-          const currentUser = await apiClient.getCurrentUser();
-          setUser(currentUser);
+          
+          try {
+            const currentUser = await apiClient.getCurrentUser();
+            console.log('✅ Данные пользователя загружены:', currentUser);
+            setUser(currentUser);
+          } catch (userError) {
+            console.error('❌ Ошибка загрузки пользователя:', userError);
+            // Если не удалось загрузить пользователя, очищаем токен
+            await AsyncStorage.removeItem('userToken');
+            setToken(null);
+            setUser(null);
+          }
+        } else {
+          console.log('ℹ️ Токен не найден в хранилище');
+          setToken(null);
+          setUser(null);
         }
       } catch (error) {
-        console.warn('Ошибка загрузки данных аутентификации:', error);
+        console.error('❌ Ошибка загрузки данных аутентификации:', error);
         await AsyncStorage.removeItem('userToken');
         setToken(null);
         setUser(null);
       } finally {
         setLoading(false);
+        setIsAuthChecked(true);
+        console.log('✅ Проверка аутентификации завершена');
       }
     };
+    
     loadAuthData();
   }, []);
 
@@ -37,13 +58,17 @@ export const AuthProvider = ({ children }) => {
   // -----------------------
   const register = async ({ email, password, username, interests }) => {
     try {
+      console.log('🔄 Начинаем регистрацию...');
       const data = await apiClient.register({ email, password, username, interests });
-      await AsyncStorage.setItem('userToken', data.access_token);
+      
+      console.log('✅ Регистрация успешна, устанавливаем состояние...');
       setToken(data.access_token);
       setUser(data.user);
+      
+      console.log('✅ Пользователь установлен в контекст:', data.user);
       return data;
     } catch (error) {
-      console.error('Ошибка регистрации:', error);
+      console.error('❌ Ошибка регистрации:', error);
       throw error;
     }
   };
@@ -51,7 +76,6 @@ export const AuthProvider = ({ children }) => {
   const login = async ({ email, password }) => {
     try {
       const data = await apiClient.login({ email, password });
-      await AsyncStorage.setItem('userToken', data.access_token);
       setToken(data.access_token);
       setUser(data.user);
       return data;
@@ -63,7 +87,7 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
-      await AsyncStorage.removeItem('userToken');
+      await apiClient.logout();
       setToken(null);
       setUser(null);
     } catch (error) {
@@ -76,19 +100,19 @@ export const AuthProvider = ({ children }) => {
   // Методы обновления пользователя
   // -----------------------
   
-  // Полное обновление данных пользователя с сервера
   const updateUserData = async () => {
     try {
+      console.log('🔄 Обновляем данные пользователя с сервера...');
       const currentUser = await apiClient.getCurrentUser();
+      console.log('✅ Данные пользователя обновлены:', currentUser);
       setUser(currentUser);
       return currentUser;
     } catch (error) {
-      console.error('Ошибка обновления данных пользователя:', error);
+      console.error('❌ Ошибка обновления данных пользователя:', error);
       throw error;
     }
   };
 
-  // Локальное обновление отдельных полей пользователя
   const updateUser = (updatedFields) => {
     setUser(prevUser => {
       if (!prevUser) return prevUser;
@@ -99,7 +123,6 @@ export const AuthProvider = ({ children }) => {
     });
   };
 
-  // Обновление пользователя после операций
   const refreshUser = async () => {
     try {
       await updateUserData();
@@ -108,9 +131,15 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // Проверка статуса аутентификации
+  // Улучшенная проверка аутентификации
   const isAuthenticated = () => {
-    return !!(token && user);
+    const authenticated = !!(token && user);
+    console.log('🔐 Проверка аутентификации:', { 
+      token: !!token, 
+      user: !!user, 
+      authenticated 
+    });
+    return authenticated;
   };
 
   return (
@@ -120,6 +149,7 @@ export const AuthProvider = ({ children }) => {
         user,
         token,
         loading,
+        isAuthChecked,
         
         // Методы аутентификации
         register,
@@ -128,7 +158,7 @@ export const AuthProvider = ({ children }) => {
         
         // Методы обновления пользователя
         updateUserData,
-        updateUser, // ✅ ДОБАВЛЕНО
+        updateUser,
         refreshUser,
         setUser,
         
@@ -141,7 +171,6 @@ export const AuthProvider = ({ children }) => {
   );
 };
 
-// Хук для использования контекста
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {

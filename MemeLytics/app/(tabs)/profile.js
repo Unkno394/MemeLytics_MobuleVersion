@@ -19,13 +19,11 @@ import { ThemeContext } from "../../src/context/ThemeContext";
 import { router } from 'expo-router';
 import { EmojiText } from "../../components/Twemoji";
 import { useAuth } from "../../src/context/AuthContext";
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { apiClient } from "../../api/client";
+import { useProfile } from "../../hooks/useProfile";
 
 const { width, height } = Dimensions.get("window");
 const STEP = 70;
 const NAVIGATION_DELAY = 80;
-
 
 // ------------------- ICONS -------------------
 const HomeIcon = ({ color = "#000" }) => (
@@ -85,65 +83,6 @@ const CloseIcon = ({ color = "#FFF", size = 32 }) => (
     <Path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" fill={color} />
   </Svg>
 );
-
-// ------------------- Refresh Spinner Component -------------------
-const RefreshSpinner = ({ isDark, refreshing }) => {
-  const spinAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    if (refreshing) {
-      Animated.loop(
-        Animated.timing(spinAnim, {
-          toValue: 1,
-          duration: 1000,
-          useNativeDriver: true,
-        })
-      ).start();
-    } else {
-      spinAnim.setValue(0);
-    }
-  }, [refreshing]);
-
-  const spin = spinAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg']
-  });
-
-  const spinnerStyles = {
-    refreshSpinner: {
-      width: 48,
-      height: 48,
-      justifyContent: 'center',
-      alignItems: 'center',
-    },
-    spinnerCircle: {
-      width: 48,
-      height: 48,
-      borderRadius: 24,
-      borderTopWidth: 3,
-      borderTopColor: isDark ? '#00DEE8' : '#00BFA6',
-      borderRightWidth: 3,
-      borderRightColor: 'transparent',
-      borderBottomWidth: 3,
-      borderBottomColor: 'transparent',
-      borderLeftWidth: 3,
-      borderLeftColor: 'transparent',
-    }
-  };
-
-  return (
-    <View style={spinnerStyles.refreshSpinner}>
-      <Animated.View 
-        style={[
-          spinnerStyles.spinnerCircle,
-          { 
-            transform: [{ rotate: spin }]
-          }
-        ]} 
-      />
-    </View>
-  );
-};
 
 // ------------------- TabItem Component -------------------
 const TabItem = React.memo(({ 
@@ -247,433 +186,6 @@ const TabItem = React.memo(({
   );
 });
 
-// ------------------- ProfileScreen -------------------
-const ProfileScreen = () => {
-  const themeContext = useContext(ThemeContext);
-  const isDark = useMemo(() => themeContext?.isDark ?? false, [themeContext]);
-  const { user } = useAuth();
-  
-  // Добавь состояния для данных
-  const [memesCreated, setMemesCreated] = useState([]);
-  const [memesSaved, setMemesSaved] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  // Остальные состояния...
-  const [activeTab, setActiveTab] = useState("profile");
-  const [activeMemeTab, setActiveMemeTab] = useState("created");
-  const [isAvatarVisible, setIsAvatarVisible] = useState(false);
-  const [isGalleryVisible, setIsGalleryVisible] = useState(false);
-  const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  const [refreshing, setRefreshing] = useState(false);
-
-// Функция загрузки данных профиля
-const loadProfileData = useCallback(async () => {
-  if (!user?.id) return;
-  
-  try {
-    setIsLoading(true);
-    
-    // Загружаем созданные мемы
-    const createdMemes = await apiClient.getUserMemes(user.id, 'created');
-    setMemesCreated(createdMemes.memes || []);
-    
-    // Загружаем сохраненные мемы
-    const savedMemes = await apiClient.getUserMemes(user.id, 'saved');
-    setMemesSaved(savedMemes.memes || []);
-    
-  } catch (error) {
-    console.error('Error loading profile data:', error);
-  } finally {
-    setIsLoading(false);
-  }
-}, [user?.id]);
-
-  // Загружаем данные при монтировании и обновлении
-  useEffect(() => {
-    loadProfileData();
-  }, [loadProfileData]);
-
-  // Обновляем данные при pull-to-refresh
-  const onRefresh = useCallback(() => {
-    setRefreshing(true);
-    loadProfileData().finally(() => {
-      setRefreshing(false);
-    });
-  }, [loadProfileData]);
-
-const userAvatar = user?.avatar_url ? { uri: user.avatar_url } : require("../../src/assets/cool_avatar.jpg");
-const username = user?.username || user?.name || "User Name 😎";
-const stats = user?.stats || { followers: 0, following: 0, likes: 0 };
-
-  const currentMemes = activeMemeTab === "created" ? memesCreated : memesSaved;
-  
-  const tabs = useMemo(
-    () => [
-      { id: "home", icon: HomeIcon, label: "Главная" },
-      { id: "search", icon: SearchIcon, label: "Поиск" },
-      { id: "random", icon: CubeIcon, label: "Создать" },
-      { id: "messenger", icon: MessageIcon, label: "Чаты" },
-      { id: "profile", icon: AccountIcon, label: "Профиль" },
-    ],
-    []
-  );
-
-  const theme = useMemo(
-    () =>
-      isDark
-        ? {
-            background: "#0F111E",
-            text: "#FFFFFF",
-            secondaryText: "#A3B7D2",
-            accent: "#16DBBE",
-            tabInactive: "#1A1B30",
-            navBackground: ["#1A1B30", "#2A2B42"],
-            indicatorGradient: ["#00DEE8", "#77EE5F"],
-            activeIcon: "#FFFFFF",
-            inactiveIcon: "#1FD3B9",
-          }
-        : {
-            background: "#EAF0FF",
-            text: "#1B1F33",
-            secondaryText: "#64748B",
-            accent: "#16A085",
-            tabInactive: "#D6E2F5",
-            navBackground: ["#FFFFFF", "#F8FAFF"],
-            indicatorGradient: ["#00BFA6", "#5CE1E6"],
-            activeIcon: "#1FD3B9",
-            inactiveIcon: "#7C8599",
-          },
-    [isDark]
-  );
-
-  const initialIndex = useMemo(() => tabs.findIndex((t) => t.id === activeTab), [tabs]);
-  
-  const translateX = useRef(new Animated.Value(initialIndex * STEP)).current;
-  const circleScales = useRef(tabs.map((t) => new Animated.Value(t.id === activeTab ? 1 : 0))).current;
-  const iconTranslates = useRef(tabs.map((t) => new Animated.Value(t.id === activeTab ? -32 : 0))).current;
-  const textOpacities = useRef(tabs.map((t) => new Animated.Value(t.id === activeTab ? 1 : 0))).current;
-  const textTranslates = useRef(tabs.map((t) => new Animated.Value(t.id === activeTab ? 10 : 20))).current;
-
-  const navTimeoutRef = useRef(null);
-
-  // Анимация навигации
-  useEffect(() => {
-    const index = tabs.findIndex((tab) => tab.id === activeTab);
-
-    Animated.spring(translateX, {
-      toValue: index * STEP,
-      useNativeDriver: true,
-      friction: 8,
-      tension: 40,
-    }).start();
-
-    tabs.forEach((tab, i) => {
-      const isActive = tab.id === activeTab;
-      Animated.spring(circleScales[i], { toValue: isActive ? 1 : 0, useNativeDriver: true }).start();
-      Animated.spring(iconTranslates[i], { toValue: isActive ? -32 : 0, useNativeDriver: true }).start();
-      Animated.parallel([
-        Animated.timing(textOpacities[i], { toValue: isActive ? 1 : 0, duration: 200, useNativeDriver: true }),
-        Animated.spring(textTranslates[i], { toValue: isActive ? 10 : 20, useNativeDriver: true }),
-      ]).start();
-    });
-  }, [activeTab, tabs]);
-
-  // Навигация
-  const navigateTo = useCallback((tabId) => {
-    if (navTimeoutRef.current) clearTimeout(navTimeoutRef.current);
-
-    const navigate = () => {
-      switch (tabId) {
-        case "home":
-          router.push("/");
-          break;
-        case "search":
-          router.push("/search");
-          break;
-        case "random":
-          router.push("/create");
-          break;
-        case "messenger":
-          router.push("/messenger");
-          break;
-        case "profile":
-          router.push("/profile");
-          break;
-        default:
-          break;
-      }
-    };
-
-    if (NAVIGATION_DELAY > 0) {
-      navTimeoutRef.current = setTimeout(navigate, NAVIGATION_DELAY);
-    } else {
-      navigate();
-    }
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (navTimeoutRef.current) {
-        clearTimeout(navTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  const handleTabPress = useCallback((tabId) => {
-    setActiveTab(tabId);
-    navigateTo(tabId);
-  }, [navigateTo]);
-
-  // Функции для галереи
-  const openGallery = useCallback((index) => {
-    setCurrentImageIndex(index);
-    setIsGalleryVisible(true);
-  }, []);
-
-  const closeGallery = useCallback(() => {
-    setIsGalleryVisible(false);
-  }, []);
-
-  const handleImageSwipe = useCallback((event) => {
-    const { contentOffset } = event.nativeEvent;
-    const index = Math.round(contentOffset.x / width);
-    setCurrentImageIndex(index);
-  }, []);
-
-  const renderMasonryGrid = useCallback((memes, isCreatedTab) => {
-    const columnWidth = (width - 24) / 2;
-    const columns = [[], []];
-    const columnHeights = [0, 0];
-
-    memes.forEach((meme) => {
-      const shortestColumnIndex = columnHeights[0] <= columnHeights[1] ? 0 : 1;
-      columns[shortestColumnIndex].push(meme);
-      columnHeights[shortestColumnIndex] += meme.height;
-    });
-
-    const masonryStyles = createMasonryStyles(isDark);
-
-    return (
-      <View style={masonryStyles.masonryContainer}>
-        {columns.map((column, columnIndex) => (
-          <View key={columnIndex} style={masonryStyles.column}>
-            {column.map((meme, memeIndex) => {
-              const absoluteIndex = columnIndex === 0 ? memeIndex : columns[0].length + memeIndex;
-              return (
-                <TouchableOpacity 
-                  key={meme.id} 
-                  style={[masonryStyles.memeItem, { width: columnWidth }]}
-                  onPress={() => router.push({
-                    pathname: '/post-detail',
-                    params: {
-                      postId: meme.id,
-                      imageUri: meme.uri,
-                      postType: isCreatedTab ? 'ownPost' : 'savedPost'
-                    }
-                  })}
-                >
-                  <Image
-                    source={{ uri: meme.uri }}
-                    style={[masonryStyles.memeImage, { height: meme.height }]}
-                    resizeMode="cover"
-                  />
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        ))}
-      </View>
-    );
-  }, [isDark]);
-
-  const mainStyles = createStyles(theme, isDark);
-
-  return (
-    <View style={mainStyles.container}>
-      <ScrollView
-        style={mainStyles.scrollView}
-        contentContainerStyle={mainStyles.scrollViewContent}
-        showsVerticalScrollIndicator={true}
-        bounces={true}
-        overScrollMode="always"
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            tintColor="transparent"
-            colors={['transparent']}
-            progressBackgroundColor="transparent"
-          />
-        }
-        scrollEventThrottle={16}
-      >
-     {/* Header */}
-<View style={mainStyles.header}>
-  <TouchableOpacity onPress={() => setIsAvatarVisible(true)}>
-    <Image
-      source={userAvatar}
-      style={mainStyles.avatar}
-    />
-  </TouchableOpacity>
-  <EmojiText 
-    text={username} 
-    style={mainStyles.userName}
-  />
-
-  <TouchableOpacity
-    style={mainStyles.shareButton}
-    onPress={() => router.push('/edit-profile')}
-  >
-    <Text style={mainStyles.shareButtonText}>
-      Изменить профиль
-    </Text>
-  </TouchableOpacity>
-</View>
-
-{/* Stats */}
-<View style={mainStyles.statsContainer}>
-  <View style={mainStyles.statsRow}>
-    <Text style={mainStyles.statLabel}>Подписки</Text>
-    <Text style={mainStyles.statLabel}>Подписчики</Text>
-    <Text style={mainStyles.statLabel}>Лайки</Text>
-  </View>
-  <View style={mainStyles.statsRow}>
-    <Text style={mainStyles.statNumber}>{stats.following || 0}</Text>
-    <Text style={mainStyles.statNumber}>{stats.followers || 0}</Text>
-    <Text style={mainStyles.statNumber}>{stats.likes || 0}</Text>
-  </View>
-</View>
-
-        {/* Meme Tabs */}
-        <View style={mainStyles.tabsRow}>
-          <TouchableOpacity
-            style={[
-              mainStyles.tabButton,
-              { backgroundColor: activeMemeTab === "created" ? theme.accent : theme.tabInactive },
-            ]}
-            onPress={() => setActiveMemeTab("created")}
-          >
-            <Text
-              style={[
-                mainStyles.tabText,
-                { color: activeMemeTab === "created" ? (isDark ? "#0F111E" : "#FFFFFF") : theme.secondaryText },
-              ]}
-            >
-              Созданные
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              mainStyles.tabButton,
-              { backgroundColor: activeMemeTab === "saved" ? theme.accent : theme.tabInactive },
-            ]}
-            onPress={() => setActiveMemeTab("saved")}
-          >
-            <Text
-              style={[
-                mainStyles.tabText,
-                { color: activeMemeTab === "saved" ? (isDark ? "#0F111E" : "#FFFFFF") : theme.secondaryText },
-              ]}
-            >
-              Сохранённые
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Memes */}
-        {renderMasonryGrid(currentMemes, activeMemeTab === "created")}
-        
-        {/* Bottom Spacing */}
-        <View style={{ height: 100 }} />
-      </ScrollView>
-
-      {/* Avatar modal */}
-      <Modal visible={isAvatarVisible} transparent animationType="fade">
-        <TouchableWithoutFeedback onPress={() => setIsAvatarVisible(false)}>
-          <View style={mainStyles.modalContainer}>
-<Image 
-  source={user?.avatar_url ? { uri: user.avatar_url } : require("../../src/assets/cool_avatar.jpg")} 
-  style={mainStyles.fullscreenImage} 
-/>
-          </View>
-        </TouchableWithoutFeedback>
-      </Modal>
-
-      {/* Gallery modal */}
-      <Modal visible={isGalleryVisible} transparent animationType="fade">
-        <View style={mainStyles.galleryModal}>
-          <View style={mainStyles.galleryHeader}>
-            <TouchableOpacity style={mainStyles.closeButton} onPress={closeGallery}>
-              <CloseIcon />
-            </TouchableOpacity>
-            <Text style={mainStyles.imageCounter}>
-              {currentImageIndex + 1} / {currentMemes.length}
-            </Text>
-          </View>
-          
-          <FlatList
-            data={currentMemes}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            keyExtractor={(item) => item.id}
-            initialScrollIndex={currentImageIndex}
-            getItemLayout={(data, index) => ({
-              length: width,
-              offset: width * index,
-              index,
-            })}
-            onMomentumScrollEnd={handleImageSwipe}
-            renderItem={({ item }) => (
-              <View style={mainStyles.galleryItem}>
-                <Image source={{ uri: item.uri }} style={mainStyles.galleryImage} />
-              </View>
-            )}
-          />
-        </View>
-      </Modal>
-
-      {/* Bottom Navigation как в index.js */}
-      <View style={mainStyles.navigationWrapper}>
-        <View style={mainStyles.navigation}>
-          <LinearGradient 
-            colors={theme.navBackground} 
-            start={{ x: 1, y: 0 }} 
-            end={{ x: 0, y: 0 }} 
-            style={mainStyles.navigationGradient}
-          >
-            {tabs.map((tab, index) => (
-              <TabItem
-                key={tab.id}
-                tab={tab}
-                index={index}
-                isActive={tab.id === activeTab}
-                isDark={isDark}
-                theme={theme}
-                onPress={handleTabPress}
-                circleScales={circleScales}
-                iconTranslates={iconTranslates}
-                textOpacities={textOpacities}
-                textTranslates={textTranslates}
-                translateX={translateX}
-              />
-            ))}
-          </LinearGradient>
-
-          <Animated.View style={[mainStyles.indicator, { transform: [{ translateX: translateX }] }]}>
-            <LinearGradient 
-              colors={theme.indicatorGradient} 
-              start={{ x: 0.5, y: 0 }} 
-              end={{ x: 0.4, y: 1.5 }} 
-              style={mainStyles.indicatorGradient} 
-            />
-          </Animated.View>
-        </View>
-      </View>
-    </View>
-  );
-};
-
 // ------------------- StyleSheet Creators -------------------
 const createStyles = (theme, isDark) => StyleSheet.create({
   container: { 
@@ -756,7 +268,16 @@ const createStyles = (theme, isDark) => StyleSheet.create({
   tabText: {
     fontWeight: "600",
   },
-  
+  emptyState: {
+    padding: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+  },
+  emptyStateText: {
+    fontSize: 16,
+    textAlign: 'center',
+  },
   // Modal styles
   modalContainer: {
     flex: 1,
@@ -801,9 +322,6 @@ const createStyles = (theme, isDark) => StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 12,
   },
-  galleryContainer: {
-    flex: 1,
-  },
   galleryImage: {
     width: width,
     height: height,
@@ -815,8 +333,7 @@ const createStyles = (theme, isDark) => StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-
-  // Navigation styles как в index.js
+  // Navigation styles
   navigationWrapper: { 
     position: "absolute", 
     bottom: 0, 
@@ -825,7 +342,7 @@ const createStyles = (theme, isDark) => StyleSheet.create({
     alignItems: "center" 
   },
   navigation: { 
-    width, 
+    width,  
     height: 70, 
     borderRadius: 10, 
     overflow: "visible" 
@@ -936,5 +453,438 @@ const createTabItemStyles = (isDark) => StyleSheet.create({
     backgroundColor: "transparent" 
   },
 });
+
+// ------------------- ProfileScreen -------------------
+const ProfileScreen = () => {
+  const themeContext = useContext(ThemeContext);
+  const isDark = useMemo(() => themeContext?.isDark ?? false, [themeContext]);
+  const { user, updateUser } = useAuth();
+  
+  // Используем хук useProfile для управления данными профиля
+  const { 
+    memesCreated, 
+    memesSaved, 
+    isLoading, 
+    refreshing, 
+    loadProfileData, 
+    onRefresh 
+  } = useProfile(user?.id);
+
+  // Тема
+  const theme = useMemo(
+    () =>
+      isDark
+        ? {
+            background: "#0F111E",
+            text: "#FFFFFF",
+            secondaryText: "#A3B7D2",
+            accent: "#16DBBE",
+            tabInactive: "#1A1B30",
+            navBackground: ["#1A1B30", "#2A2B42"],
+            indicatorGradient: ["#00DEE8", "#77EE5F"],
+            activeIcon: "#FFFFFF",
+            inactiveIcon: "#1FD3B9",
+          }
+        : {
+            background: "#EAF0FF",
+            text: "#1B1F33",
+            secondaryText: "#64748B",
+            accent: "#16A085",
+            tabInactive: "#D6E2F5",
+            navBackground: ["#FFFFFF", "#F8FAFF"],
+            indicatorGradient: ["#00BFA6", "#5CE1E6"],
+            activeIcon: "#1FD3B9",
+            inactiveIcon: "#7C8599",
+          },
+    [isDark]
+  );
+
+  // Создаем стили
+  const mainStyles = useMemo(() => createStyles(theme, isDark), [theme, isDark]);
+
+  const [activeTab, setActiveTab] = useState("profile");
+  const [activeMemeTab, setActiveMemeTab] = useState("created");
+  const [isAvatarVisible, setIsAvatarVisible] = useState(false);
+  const [isGalleryVisible, setIsGalleryVisible] = useState(false);
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+
+  // Функция для преобразования данных из API с рандомными высотами как в index.js
+  const transformMemesData = useCallback((apiMemes) => {
+    if (!Array.isArray(apiMemes)) return [];
+    
+    return apiMemes.map(meme => ({
+      id: meme.id.toString(),
+      image_url: meme.image_url,
+      // Используем случайную высоту как в index.js (от 200 до 400)
+      height: 200 + Math.random() * 200,
+      title: meme.title,
+      description: meme.description,
+      created_at: meme.created_at,
+      likes_count: meme.likes_count,
+      tags: meme.tags || []
+    }));
+  }, []);
+
+  const userAvatar = user?.avatar_url ? { uri: user.avatar_url } : require("../../src/assets/cool_avatar.jpg");
+  const username = user?.username || user?.name || "User Name 😎";
+  const stats = {
+    followers: user?.followers_count || 0,
+    following: user?.following_count || 0,
+    likes: user?.likes_count || 0
+  };
+
+  const currentMemes = useMemo(() => {
+    const baseMemes = activeMemeTab === "created" ? memesCreated : memesSaved;
+    return transformMemesData(baseMemes);
+  }, [activeMemeTab, memesCreated, memesSaved, transformMemesData]);
+
+  const tabs = useMemo(
+    () => [
+      { id: "home", icon: HomeIcon, label: "Главная" },
+      { id: "search", icon: SearchIcon, label: "Поиск" },
+      { id: "random", icon: CubeIcon, label: "Создать" },
+      { id: "messenger", icon: MessageIcon, label: "Чаты" },
+      { id: "profile", icon: AccountIcon, label: "Профиль" },
+    ],
+    []
+  );
+
+  const initialIndex = useMemo(() => tabs.findIndex((t) => t.id === activeTab), [tabs]);
+  
+  const translateX = useRef(new Animated.Value(initialIndex * STEP)).current;
+  const circleScales = useRef(tabs.map((t) => new Animated.Value(t.id === activeTab ? 1 : 0))).current;
+  const iconTranslates = useRef(tabs.map((t) => new Animated.Value(t.id === activeTab ? -32 : 0))).current;
+  const textOpacities = useRef(tabs.map((t) => new Animated.Value(t.id === activeTab ? 1 : 0))).current;
+  const textTranslates = useRef(tabs.map((t) => new Animated.Value(t.id === activeTab ? 10 : 20))).current;
+
+  const navTimeoutRef = useRef(null);
+
+  // Анимация навигации
+  useEffect(() => {
+    const index = tabs.findIndex((tab) => tab.id === activeTab);
+
+    Animated.spring(translateX, {
+      toValue: index * STEP,
+      useNativeDriver: true,
+      friction: 8,
+      tension: 40,
+    }).start();
+
+    tabs.forEach((tab, i) => {
+      const isActive = tab.id === activeTab;
+      Animated.spring(circleScales[i], { toValue: isActive ? 1 : 0, useNativeDriver: true }).start();
+      Animated.spring(iconTranslates[i], { toValue: isActive ? -32 : 0, useNativeDriver: true }).start();
+      Animated.parallel([
+        Animated.timing(textOpacities[i], { toValue: isActive ? 1 : 0, duration: 200, useNativeDriver: true }),
+        Animated.spring(textTranslates[i], { toValue: isActive ? 10 : 20, useNativeDriver: true }),
+      ]).start();
+    });
+  }, [activeTab, tabs]);
+
+  // Навигация
+  const navigateTo = useCallback((tabId) => {
+    if (navTimeoutRef.current) clearTimeout(navTimeoutRef.current);
+
+    const navigate = () => {
+      switch (tabId) {
+        case "home":
+          router.push("/");
+          break;
+        case "search":
+          router.push("/search");
+          break;
+        case "random":
+          router.push("/create");
+          break;
+        case "messenger":
+          router.push("/messenger");
+          break;
+        case "profile":
+          router.push("/profile");
+          break;
+        default:
+          break;
+      }
+    };
+
+    if (NAVIGATION_DELAY > 0) {
+      navTimeoutRef.current = setTimeout(navigate, NAVIGATION_DELAY);
+    } else {
+      navigate();
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (navTimeoutRef.current) {
+        clearTimeout(navTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const handleTabPress = useCallback((tabId) => {
+    setActiveTab(tabId);
+    navigateTo(tabId);
+  }, [navigateTo]);
+
+  // Функции для галереи
+  const openGallery = useCallback((index) => {
+    setCurrentImageIndex(index);
+    setIsGalleryVisible(true);
+  }, []);
+
+  const closeGallery = useCallback(() => {
+    setIsGalleryVisible(false);
+  }, []);
+
+  const handleImageSwipe = useCallback((event) => {
+    const { contentOffset } = event.nativeEvent;
+    const index = Math.round(contentOffset.x / width);
+    setCurrentImageIndex(index);
+  }, []);
+
+const renderMasonryGrid = useCallback((memes, isCreatedTab) => {
+  const safeMemes = Array.isArray(memes) ? memes : [];
+  
+  // Если нет мемов, показываем заглушку
+  if (safeMemes.length === 0) {
+    return (
+      <View style={mainStyles.emptyState}>
+        <Text style={[mainStyles.emptyStateText, { color: theme.secondaryText }]}>
+          {isCreatedTab ? "Вы еще не создали мемы" : "У вас нет сохраненных мемов"}
+        </Text>
+      </View>
+    );
+  }
+  
+  const columnWidth = (width - 24) / 2;
+  const columns = [[], []];
+  const columnHeights = [0, 0];
+
+  // Распределяем мемы по колонкам как в index.js
+  safeMemes.forEach((meme) => {
+    const shortest = columnHeights[0] <= columnHeights[1] ? 0 : 1;
+    columns[shortest].push(meme);
+    columnHeights[shortest] += meme.height;
+  });
+
+  const masonryStyles = createMasonryStyles(isDark);
+
+  return (
+    <View style={masonryStyles.masonryContainer}>
+      {columns.map((column, colIndex) => (
+        <View key={colIndex} style={masonryStyles.column}>
+          {column.map((meme) => (
+           <TouchableOpacity 
+  key={meme.id} 
+  style={[masonryStyles.memeItem, { width: columnWidth }]}
+  onPress={() => router.push({
+    pathname: '/post-detail',
+    params: {
+      postId: meme.id,
+      imageUri: meme.image_url,
+      description: meme.description || "", // ← ДОБАВЬТЕ ЭТУ СТРОКУ
+      postType: isCreatedTab ? 'ownPost' : 'savedPost'
+    }
+  })}
+>
+              <Image
+                source={{ uri: meme.image_url }}
+                style={[masonryStyles.memeImage, { height: meme.height }]}
+                resizeMode="cover"
+              />
+            </TouchableOpacity>
+          ))}
+        </View>
+      ))}
+    </View>
+  );
+}, [currentMemes, isDark, width, theme]); // ЗАМЕНИТЬ memes НА currentMemes
+
+  return (
+    <View style={mainStyles.container}>
+      <ScrollView
+        style={mainStyles.scrollView}
+        contentContainerStyle={mainStyles.scrollViewContent}
+        showsVerticalScrollIndicator={true}
+        bounces={true}
+        overScrollMode="always"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="transparent"
+            colors={['transparent']}
+            progressBackgroundColor="transparent"
+          />
+        }
+        scrollEventThrottle={16}
+      >
+        {/* Header */}
+        <View style={mainStyles.header}>
+          <TouchableOpacity onPress={() => setIsAvatarVisible(true)}>
+            <Image
+              source={userAvatar}
+              style={mainStyles.avatar}
+            />
+          </TouchableOpacity>
+          <EmojiText 
+            text={username} 
+            style={mainStyles.userName}
+          />
+
+          <TouchableOpacity
+            style={mainStyles.shareButton}
+            onPress={() => router.push('/edit-profile')}
+          >
+            <Text style={mainStyles.shareButtonText}>
+              Изменить профиль
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Stats */}
+        <View style={mainStyles.statsContainer}>
+          <View style={mainStyles.statsRow}>
+            <Text style={mainStyles.statLabel}>Подписки</Text>
+            <Text style={mainStyles.statLabel}>Подписчики</Text>
+            <Text style={mainStyles.statLabel}>Лайки</Text>
+          </View>
+          <View style={mainStyles.statsRow}>
+            <Text style={mainStyles.statNumber}>{stats.following}</Text>
+            <Text style={mainStyles.statNumber}>{stats.followers}</Text>
+            <Text style={mainStyles.statNumber}>{stats.likes}</Text>
+          </View>
+        </View>
+
+        {/* Meme Tabs */}
+        <View style={mainStyles.tabsRow}>
+          <TouchableOpacity
+            style={[
+              mainStyles.tabButton,
+              { backgroundColor: activeMemeTab === "created" ? theme.accent : theme.tabInactive },
+            ]}
+            onPress={() => setActiveMemeTab("created")}
+          >
+            <Text
+              style={[
+                mainStyles.tabText,
+                { color: activeMemeTab === "created" ? (isDark ? "#0F111E" : "#FFFFFF") : theme.secondaryText },
+              ]}
+            >
+              Созданные
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              mainStyles.tabButton,
+              { backgroundColor: activeMemeTab === "saved" ? theme.accent : theme.tabInactive },
+            ]}
+            onPress={() => setActiveMemeTab("saved")}
+          >
+            <Text
+              style={[
+                mainStyles.tabText,
+                { color: activeMemeTab === "saved" ? (isDark ? "#0F111E" : "#FFFFFF") : theme.secondaryText },
+              ]}
+            >
+              Сохранённые
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Memes */}
+        {renderMasonryGrid(currentMemes, activeMemeTab === "created")}
+        
+        {/* Bottom Spacing */}
+        <View style={{ height: 100 }} />
+      </ScrollView>
+
+      {/* Avatar modal */}
+      <Modal visible={isAvatarVisible} transparent animationType="fade">
+        <TouchableWithoutFeedback onPress={() => setIsAvatarVisible(false)}>
+          <View style={mainStyles.modalContainer}>
+            <Image 
+              source={user?.avatar_url ? { uri: user.avatar_url } : require("../../src/assets/cool_avatar.jpg")} 
+              style={mainStyles.fullscreenImage} 
+            />
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+
+      {/* Gallery modal */}
+      <Modal visible={isGalleryVisible} transparent animationType="fade">
+        <View style={mainStyles.galleryModal}>
+          <View style={mainStyles.galleryHeader}>
+            <TouchableOpacity style={mainStyles.closeButton} onPress={closeGallery}>
+              <CloseIcon />
+            </TouchableOpacity>
+            <Text style={mainStyles.imageCounter}>
+              {currentImageIndex + 1} / {(currentMemes && currentMemes.length) || 0}
+            </Text>
+          </View>
+          
+          <FlatList
+            data={currentMemes || []}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            keyExtractor={(item) => item?.id || Math.random().toString()}
+            initialScrollIndex={currentImageIndex}
+            getItemLayout={(data, index) => ({
+              length: width,
+              offset: width * index,
+              index,
+            })}
+            onMomentumScrollEnd={handleImageSwipe}
+            renderItem={({ item }) => (
+              <View style={mainStyles.galleryItem}>
+                <Image source={{ uri: item?.image_url }} style={mainStyles.galleryImage} />
+              </View>
+            )}
+          />
+        </View>
+      </Modal>
+
+      {/* Bottom Navigation */}
+      <View style={mainStyles.navigationWrapper}>
+        <View style={mainStyles.navigation}>
+          <LinearGradient 
+            colors={theme.navBackground} 
+            start={{ x: 1, y: 0 }} 
+            end={{ x: 0, y: 0 }} 
+            style={mainStyles.navigationGradient}
+          >
+            {tabs.map((tab, index) => (
+              <TabItem
+                key={tab.id}
+                tab={tab}
+                index={index}
+                isActive={tab.id === activeTab}
+                isDark={isDark}
+                theme={theme}
+                onPress={handleTabPress}
+                circleScales={circleScales}
+                iconTranslates={iconTranslates}
+                textOpacities={textOpacities}
+                textTranslates={textTranslates}
+                translateX={translateX}
+              />
+            ))}
+          </LinearGradient>
+
+          <Animated.View style={[mainStyles.indicator, { transform: [{ translateX: translateX }] }]}>
+            <LinearGradient 
+              colors={theme.indicatorGradient} 
+              start={{ x: 0.5, y: 0 }} 
+              end={{ x: 0.4, y: 1.5 }} 
+              style={mainStyles.indicatorGradient} 
+            />
+          </Animated.View>
+        </View>
+      </View>
+    </View>
+  );
+};
 
 export default ProfileScreen;

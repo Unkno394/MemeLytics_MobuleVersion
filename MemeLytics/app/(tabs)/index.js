@@ -8,12 +8,14 @@ import {
   Image,
   ScrollView,
   RefreshControl,
+  Text
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import Svg, { Path, Defs, LinearGradient as SvgLinearGradient, Stop } from "react-native-svg";
 import { ThemeContext } from "../../src/context/ThemeContext";
 import { router, useLocalSearchParams } from "expo-router";
 import CustomAlert from "../../components/CustomAlert";
+import { postApi } from "../../api/postApi"; // ДОБАВИТЬ ИМПОРТ
 
 const { width } = Dimensions.get("window");
 const STEP = 70;
@@ -279,6 +281,7 @@ const MainScreen = () => {
   // Pull-to-refresh states
   const [refreshing, setRefreshing] = useState(false);
   const [memes, setMemes] = useState([]);
+  const [featuredMemes, setFeaturedMemes] = useState([]); // ДОБАВИТЬ СОСТОЯНИЕ ДЛЯ РЕКОМЕНДАЦИЙ
 
   const initialIndex = useMemo(() => tabs.findIndex((t) => t.id === initialActive), [tabs]);
   
@@ -293,6 +296,7 @@ const MainScreen = () => {
   // Initialize memes
   useEffect(() => {
     loadMemes();
+    loadFeaturedMemes(); // ДОБАВИТЬ ЗАГРУЗКУ РЕКОМЕНДАЦИЙ
   }, []);
 
   const loadMemes = useCallback(() => {
@@ -302,6 +306,18 @@ const MainScreen = () => {
       height: 200 + Math.random() * 200,
     }));
     setMemes(newMemes);
+  }, []);
+
+  // ДОБАВИТЬ ФУНКЦИЮ ЗАГРУЗКИ РЕКОМЕНДОВАННЫХ МЕМОВ
+  const loadFeaturedMemes = useCallback(async () => {
+    try {
+      console.log('🎯 Загрузка рекомендованных мемов...');
+      const featured = await postApi.getFeaturedMemes();
+      console.log('🎯 Загружено рекомендованных мемов:', featured.length);
+      setFeaturedMemes(featured);
+    } catch (error) {
+      console.error('❌ Ошибка загрузки рекомендаций:', error);
+    }
   }, []);
 
   useEffect(() => {
@@ -330,6 +346,9 @@ const MainScreen = () => {
       setAlertConfig({ title: "Успех!", message: "Мем успешно выложен!" });
       setAlertVisible(true);
       router.setParams({ showSuccessAlert: undefined });
+      
+      // ПЕРЕЗАГРУЗИТЬ РЕКОМЕНДАЦИИ ПРИ УСПЕШНОЙ ПУБЛИКАЦИИ
+      loadFeaturedMemes();
     }
   }, [params]);
 
@@ -383,9 +402,59 @@ const MainScreen = () => {
     setRefreshing(true);
     setTimeout(() => {
       loadMemes();
+      loadFeaturedMemes(); // ДОБАВИТЬ ПЕРЕЗАГРУЗКУ РЕКОМЕНДАЦИЙ
       setRefreshing(false);
     }, 1500);
-  }, [loadMemes]);
+  }, [loadMemes, loadFeaturedMemes]);
+
+  // ДОБАВИТЬ ФУНКЦИЮ РЕНДЕРА РЕКОМЕНДОВАННЫХ МЕМОВ
+  const renderFeaturedMemes = useCallback(() => {
+  if (featuredMemes.length === 0) return null;
+
+  const columnWidth = (width - 24) / 2;
+  const columns = [[], []];
+  const columnHeights = [0, 0];
+
+  featuredMemes.forEach((meme) => {
+    const shortest = columnHeights[0] <= columnHeights[1] ? 0 : 1;
+    columns[shortest].push(meme);
+    columnHeights[shortest] += meme.height || 300;
+  });
+
+  const masonryStyles = createMasonryStyles(isDark);
+
+  return (
+    <View style={masonryStyles.featuredSection}>
+      <View style={masonryStyles.masonryContainer}>
+        {columns.map((column, colIndex) => (
+          <View key={colIndex} style={masonryStyles.column}>
+            {column.map((meme) => (
+              <TouchableOpacity 
+                key={meme.id} 
+                style={[masonryStyles.memeItem, { width: columnWidth }]}
+                onPress={() => router.push({
+                  pathname: '/post-detail',
+                  params: {
+                    postId: meme.id,
+                    imageUri: meme.image_url,
+                    description: meme.description || "",
+                    postType: 'feedPost'
+                  }
+                })}
+              >
+                <Image
+                  source={{ uri: meme.image_url }}
+                  style={[masonryStyles.memeImage, { height: meme.height || 300 }]}
+                  resizeMode="cover"
+                />
+              </TouchableOpacity>
+            ))}
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}, [featuredMemes, isDark]);
 
   const renderMasonryGrid = useCallback(() => {
     const columnWidth = (width - 24) / 2;
@@ -449,7 +518,8 @@ const MainScreen = () => {
         }
         scrollEventThrottle={16}
       >
-        {/* Masonry Grid */}
+        {/* Рекомендованные мемы */}
+        {renderFeaturedMemes()}
         {renderMasonryGrid()}
 
         {/* Bottom Spacing */}
@@ -561,6 +631,16 @@ const createStyles = (theme, isDark) => StyleSheet.create({
 });
 
 const createMasonryStyles = (isDark) => StyleSheet.create({
+  featuredSection: { // ДОБАВИТЬ СТИЛЬ ДЛЯ СЕКЦИИ РЕКОМЕНДАЦИЙ
+    marginBottom: 16,
+  },
+  featuredTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginHorizontal: 12,
+    marginTop: 16,
+    marginBottom: 8,
+  },
   masonryContainer: { flexDirection: "row", paddingHorizontal: 8, paddingTop: 8 },
   column: { flex: 1, marginHorizontal: 4 },
   memeItem: { 

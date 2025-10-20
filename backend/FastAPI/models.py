@@ -1,7 +1,8 @@
 # models.py
-from sqlalchemy import Column, Integer, String, Boolean, Text, JSON, DateTime
+from sqlalchemy import Column, Integer, String, Boolean, Text, JSON, DateTime, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship
 
 Base = declarative_base()
 
@@ -20,6 +21,26 @@ class User(Base):
     followers_count = Column(Integer, default=0)
     following_count = Column(Integer, default=0)
     likes_count = Column(Integer, default=0)
+    
+    # Relationship to memes
+    memes = relationship("Meme", back_populates="owner")
+
+class Meme(Base):
+    __tablename__ = "memes"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    image_url = Column(String, nullable=False)
+    title = Column(String, nullable=True)
+    description = Column(Text, nullable=True)
+    width = Column(Integer, default=360)
+    height = Column(Integer, default=300)
+    owner_id = Column(Integer, ForeignKey("users.id"))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    likes_count = Column(Integer, default=0)
+    tags = Column(JSON, default=[])
+    is_featured = Column(Boolean, default=False)
+    # Relationship
+    owner = relationship("User", back_populates="memes")
 
 class Chat(Base):
     __tablename__ = "chats"

@@ -13,7 +13,8 @@ import {
   SafeAreaView,
   KeyboardAvoidingView,
   Platform,
-  Keyboard
+  Keyboard,
+  Alert
 } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -21,9 +22,10 @@ import { useAuth } from '../../src/context/AuthContext';
 import { router } from 'expo-router'; 
 import Svg, { Path } from 'react-native-svg';
 import LiquidEtherBackground from '../../components/LiquidEtherBackground';
-import * as ImagePicker from 'expo-image-picker';
-import { EmojiText } from '../../components/Twemoji';
+import { useImagePicker } from '../../hooks/useImagePicker';
+import { useProfile } from '../../hooks/useProfile';
 import { apiClient } from '../../api/client';
+import CustomAlert from '../../components/CustomAlert';
 
 const { width, height } = Dimensions.get('window');
 
@@ -40,7 +42,7 @@ const CheckIcon = ({ color = "#FFFFFF", size = 16 }) => (
   </Svg>
 );
 
-// ===== Кастомный TextInput с Twemoji (как в edit-profile) =====
+// ===== Кастомный TextInput с Twemoji =====
 const EmojiTextInput = ({ value, onChangeText, placeholder, style, theme, onFocus, onBlur }) => {
   const localStyles = StyleSheet.create({
     container: {
@@ -68,7 +70,7 @@ const EmojiTextInput = ({ value, onChangeText, placeholder, style, theme, onFocu
   return (
     <View style={[localStyles.container, style]}>
       {value ? (
-        <EmojiText text={value} style={[localStyles.text, { color: theme.inputText || theme.text || '#FFFFFF' }]} />
+        <Text style={[localStyles.text, { color: theme.inputText || theme.text || '#FFFFFF' }]}>{value}</Text>
       ) : (
         <Text style={localStyles.placeholder}>{placeholder}</Text>
       )}
@@ -178,36 +180,116 @@ const Stepper = ({
   onFinalStepCompleted = () => {}, 
   backButtonText = 'Назад', 
   nextButtonText = 'Продолжить',
-  stepValidations = [] 
+  stepValidations = [],
+  formData = {},
+  showAlert = () => {}
 }) => {
   const insets = useSafeAreaInsets();
   const [currentStep, setCurrentStep] = useState(initialStep);
+  const [stepValidationsState, setStepValidationsState] = useState([]);
+  const [isChecking, setIsChecking] = useState(false);
+  const [alertVisible, setAlertVisible] = useState(false);
+const [alertData, setAlertData] = useState({
+  title: '',
+  message: '',
+  buttons: []
+});
+
   const stepsArray = React.Children.toArray(children);
   const totalSteps = stepsArray.length;
 
   const slideAnim = useRef(new Animated.Value(initialStep)).current;
 
-  const updateStep = React.useCallback((newStep, dir) => {
-    if (newStep === currentStep) return;
+  // Функция для обновления валидации шага
+  const handleStepValidationChange = (stepIndex, isValid) => {
+    setStepValidationsState(prev => {
+      const newValidations = [...prev];
+      newValidations[stepIndex] = isValid;
+      return newValidations;
+    });
+  };
 
-    // Проверка валидности текущего шага перед переходом
-    if (newStep > currentStep) {
-      const validationFn = stepValidations[currentStep - 1];
-      if (validationFn && !validationFn()) {
-        return; // Не переходим если шаг не валиден
+const checkExistingData = async (stepData) => {
+  if (currentStep === 1) {
+    try {
+      const res = await apiClient.request(`/check-email?email=${encodeURIComponent(stepData.step1.email)}`);
+if (res.exists) {
+  console.log('⚠️ Email уже существует:', stepData.step1.email);
+  return { success: false, error: 'email', message: 'Этот email уже зарегистрирован' };
+}
+
+      return { success: true };
+    } catch (error) {
+      console.error('Ошибка проверки email:', error.message);
+      return { success: true }; // не блокируем шаг при ошибке сети
+    }
+  } else if (currentStep === 2) {
+    try {
+      const res = await apiClient.request(`/check-username?username=${encodeURIComponent(stepData.step2.username)}`);
+      if (res.exists) {
+        return { success: false, error: 'username', message: 'Выберите пожалуйста другой.' };
       }
+      return { success: true };
+    } catch (error) {
+      console.error('Ошибка проверки username:', error.message);
+      return { success: true };
+    }
+  }
+  return { success: true };
+};
+
+
+  const updateStep = React.useCallback(async (newStep, dir) => {
+  if (newStep === currentStep) return;
+
+  // Проверка валидности текущего шага перед переходом
+  if (newStep > currentStep) {
+    const validationFn = stepValidations[currentStep - 1];
+    const stepValidationState = stepValidationsState[currentStep - 1];
+    
+    if ((validationFn && !validationFn()) || stepValidationState === false) {
+      return; // Не переходим если шаг не валиден
     }
 
-    setCurrentStep(newStep);
+    // Проверяем существование email/username перед переходом
+    setIsChecking(true);
+    try {
+      const checkResult = await checkExistingData(formData);
+      
+if (!checkResult.success) {
+  showAlert(
+    checkResult.error === 'email' ? 'Email уже используется' : 'Никнейм занят',
+    checkResult.message,
+    checkResult.error === 'email'
+      ? [
+          { text: 'Войти', onPress: () => setTimeout(() => router.push('/login'), 200) },
+          { text: 'OK' }
+        ]
+      : [{ text: 'OK' }]
+  );
 
-    Animated.timing(slideAnim, {
-      toValue: newStep,
-      duration: 400,
-      useNativeDriver: true,
-    }).start(() => {
-      if (newStep > totalSteps) onFinalStepCompleted();
-    });
-  }, [currentStep, slideAnim, totalSteps, onFinalStepCompleted, stepValidations]);
+  setIsChecking(false);
+  return;
+}
+
+    } catch (error) {
+      console.error('Ошибка проверки данных:', error);
+      setIsChecking(false);
+      return;
+    }
+    setIsChecking(false);
+  }
+
+  setCurrentStep(newStep);
+
+  Animated.timing(slideAnim, {
+    toValue: newStep,
+    duration: 400,
+    useNativeDriver: true,
+  }).start(() => {
+    if (newStep > totalSteps) onFinalStepCompleted();
+  });
+}, [currentStep, slideAnim, totalSteps, onFinalStepCompleted, stepValidations, stepValidationsState, formData]);
 
   const isLastStep = currentStep === totalSteps;
   const isCompleted = currentStep > totalSteps;
@@ -215,7 +297,9 @@ const Stepper = ({
   // Проверяем валидность текущего шага для активации кнопки
   const isCurrentStepValid = () => {
     const validationFn = stepValidations[currentStep - 1];
-    return !validationFn || validationFn();
+    const stepValidationState = stepValidationsState[currentStep - 1];
+    
+    return (!validationFn || validationFn()) && stepValidationState !== false && !isChecking;
   };
 
   return (
@@ -278,7 +362,9 @@ const Stepper = ({
                 },
               ]}
             >
-              {step}
+              {React.cloneElement(step, {
+                onValidationChange: (isValid) => handleStepValidationChange(index, isValid)
+              })}
             </Animated.View>
           );
         })}
@@ -291,30 +377,35 @@ const Stepper = ({
             <TouchableOpacity
               style={styles.backButton}
               onPress={() => updateStep(currentStep - 1, -1)}
+              disabled={isChecking}
             >
               <Text style={styles.backButtonText}>{backButtonText}</Text>
             </TouchableOpacity>
           )}
-          <TouchableOpacity
-            style={[styles.nextButton, !isCurrentStepValid() && styles.nextButtonDisabled]}
-            onPress={() => {
-              if (isLastStep) {
-                updateStep(totalSteps + 1, 1);
-              } else {
-                updateStep(currentStep + 1, 1);
-              }
-            }}
-            disabled={!isCurrentStepValid()}
-          >
+<TouchableOpacity
+    style={[styles.nextButton, !isCurrentStepValid() && styles.nextButtonDisabled]}
+    onPress={() => {
+      if (isLastStep) {
+        updateStep(totalSteps + 1, 1);
+      } else {
+        updateStep(currentStep + 1, 1);
+      }
+    }}
+    disabled={!isCurrentStepValid()}
+  >
             <LinearGradient 
               colors={isCurrentStepValid() ? ['#16DBBE', '#9B8CFF'] : ['#2A2B42', '#2A2B42']} 
               start={{ x: 0, y: 0 }} 
               end={{ x: 1, y: 0 }} 
               style={styles.nextButtonGradient}
             >
-              <Text style={[styles.nextButtonText, !isCurrentStepValid() && styles.nextButtonTextDisabled]}>
-                {isLastStep ? 'Завершить' : nextButtonText}
-              </Text>
+              {isChecking ? (
+                <Text style={styles.loadingText}>⏳</Text>
+              ) : (
+                <Text style={[styles.nextButtonText, !isCurrentStepValid() && styles.nextButtonTextDisabled]}>
+                  {isLastStep ? 'Завершить' : nextButtonText}
+                </Text>
+              )}
             </LinearGradient>
           </TouchableOpacity>
         </View>
@@ -324,11 +415,25 @@ const Stepper = ({
 };
 
 // Шаг 1: Email/пароль
-const Step1EmailPassword = React.memo(({ onDataChange }) => {
+const Step1EmailPassword = React.memo(({ onDataChange, onValidationChange }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+
+  // Компонент глазка
+  const EyeIcon = ({ show, onPress }) => (
+    <TouchableOpacity
+      onPress={onPress}
+      style={styles.eyeButton}
+      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+    >
+      <Text style={styles.eyeIcon}>
+        {show ? '🙈' : '🙉'}
+      </Text>
+    </TouchableOpacity>
+  );
 
   const validateEmail = (email) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -341,11 +446,15 @@ const Step1EmailPassword = React.memo(({ onDataChange }) => {
 
   const handleEmailChange = (text) => {
     setEmail(text);
+    
     if (text && !validateEmail(text)) {
       setEmailError('Введите корректный email');
+      onValidationChange(false);
     } else {
       setEmailError('');
+      onValidationChange(validateEmail(text) && validatePassword(password));
     }
+    
     onDataChange({ email: text, password });
   };
 
@@ -353,23 +462,17 @@ const Step1EmailPassword = React.memo(({ onDataChange }) => {
     setPassword(text);
     if (text && !validatePassword(text)) {
       setPasswordError('Пароль должен содержать минимум 6 символов');
+      onValidationChange(false);
     } else {
       setPasswordError('');
+      onValidationChange(validateEmail(email) && validatePassword(text));
     }
     onDataChange({ email, password: text });
   };
 
-  const theme = {
-    background: '#0F111E',
-    text: '#FFFFFF',
-    inputBackground: '#1A1B30',
-    inputText: '#FFFFFF',
-    inputPlaceholder: '#7C8599',
+  const handleLoginPress = () => {
+    router.push('login');
   };
-
-const handleLoginPress = () => {
-  router.push('login');
-};
 
   return (
     <View style={styles.stepContainer}>
@@ -377,11 +480,12 @@ const handleLoginPress = () => {
       <Text style={styles.stepSubtitle}>Введите email и пароль для регистрации</Text>
       
       <View style={styles.inputContainer}>
+        {/* Поле Email */}
         <View style={[styles.inputWrapper, emailError && styles.inputWrapperError]}>
           <TextInput
-            style={[styles.input, { color: theme.text }]}
+            style={[styles.input, { color: '#FFFFFF' }]}
             placeholder="Email"
-            placeholderTextColor={theme.inputPlaceholder}
+            placeholderTextColor="#7C8599"
             value={email}
             onChangeText={handleEmailChange}
             keyboardType="email-address"
@@ -390,19 +494,24 @@ const handleLoginPress = () => {
         </View>
         {emailError ? <Text style={styles.errorText}>{emailError}</Text> : null}
         
+        {/* Поле Пароля с глазком */}
         <View style={[styles.inputWrapper, passwordError && styles.inputWrapperError]}>
           <TextInput
-            style={[styles.input, { color: theme.text }]}
+            style={[styles.input, { color: '#FFFFFF', paddingRight: 50 }]}
             placeholder="Пароль"
-            placeholderTextColor={theme.inputPlaceholder}
+            placeholderTextColor="#7C8599"
             value={password}
             onChangeText={handlePasswordChange}
-            secureTextEntry
+            secureTextEntry={!showPassword}
+          />
+          <EyeIcon 
+            show={showPassword} 
+            onPress={() => setShowPassword(!showPassword)} 
           />
         </View>
         {passwordError ? <Text style={styles.errorText}>{passwordError}</Text> : null}
 
-        {/* === КНОПКА "ВОЙТИ" === */}
+        {/* Кнопка "Войти" */}
         <View style={styles.loginContainer}>
           <Text style={styles.loginText}>Уже есть аккаунт?</Text>
           <TouchableOpacity 
@@ -418,27 +527,31 @@ const handleLoginPress = () => {
 });
 
 // Шаг 2: Профиль
-const Step2Profile = React.memo(({ onDataChange }) => {
+const Step2Profile = React.memo(({ onDataChange, onValidationChange }) => {
   const [username, setUsername] = useState('');
-  const [avatar, setAvatar] = useState(null);
   const [isInputFocused, setIsInputFocused] = useState(false);
+  const [usernameError, setUsernameError] = useState('');
+  
+  // Используем хук для выбора изображения
+  const { pickImage, image: avatar } = useImagePicker();
 
-  const pickImage = async () => {
-    let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [1, 1],
-      quality: 0.8,
-    });
-
-    if (!result.canceled) {
-      setAvatar(result.assets[0].uri);
-      onDataChange({ username, avatar: result.assets[0].uri });
+  useEffect(() => {
+    if (avatar) {
+      onDataChange({ username, avatar });
     }
-  };
+  }, [avatar, username]);
 
   const handleUsernameChange = (text) => {
     setUsername(text);
+    
+    if (text.trim().length === 0) {
+      setUsernameError('Введите имя пользователя');
+      onValidationChange(false);
+    } else {
+      setUsernameError('');
+      onValidationChange(true);
+    }
+    
     onDataChange({ username: text, avatar });
   };
 
@@ -450,12 +563,8 @@ const Step2Profile = React.memo(({ onDataChange }) => {
     setIsInputFocused(false);
   };
 
-  const theme = {
-    background: '#0F111E',
-    text: '#FFFFFF',
-    inputBackground: '#1A1B30',
-    inputText: '#FFFFFF',
-    inputPlaceholder: '#7C8599',
+  const handlePickImage = async () => {
+    await pickImage();
   };
 
   return (
@@ -473,7 +582,7 @@ const Step2Profile = React.memo(({ onDataChange }) => {
         <Text style={styles.stepSubtitle}>Добавьте имя и аватар</Text>
         
         <View style={styles.avatarContainer}>
-          <TouchableOpacity style={styles.avatarPlaceholder} onPress={pickImage}>
+          <TouchableOpacity style={styles.avatarPlaceholder} onPress={handlePickImage}>
             {avatar ? (
               <Image source={{ uri: avatar }} style={styles.avatarImage} />
             ) : (
@@ -484,16 +593,21 @@ const Step2Profile = React.memo(({ onDataChange }) => {
         </View>
         
         <View style={[styles.inputContainer, isInputFocused && styles.inputContainerFocused]}>
-          <View style={[styles.emojiInputWrapper, { backgroundColor: theme.inputBackground }]}>
+          <View style={[styles.emojiInputWrapper, usernameError && styles.inputWrapperError]}>
             <EmojiTextInput 
               value={username} 
               onChangeText={handleUsernameChange} 
               placeholder="Имя пользователя" 
-              theme={theme}
+              theme={{
+                inputBackground: '#1A1B30',
+                inputText: '#FFFFFF',
+                inputPlaceholder: '#7C8599'
+              }}
               onFocus={handleInputFocus}
               onBlur={handleInputBlur}
             />
           </View>
+          {usernameError ? <Text style={styles.errorText}>{usernameError}</Text> : null}
         </View>
 
         {/* Spacer для поднятия контента над клавиатурой */}
@@ -573,7 +687,7 @@ const Step4Confirmation = React.memo(() => {
           <Text style={styles.successIconText}>🎉</Text>
         </View>
         <Text style={styles.successTitle}>Регистрация завершена!</Text>
-        <Text style={styles.successSubtitle}>
+        <Text style={styles.stepSubtitle}>
           Добро пожаловать в сообщество мемов!{'\n'}
           Начните исследовать и создавать мемы.
         </Text>
@@ -584,9 +698,15 @@ const Step4Confirmation = React.memo(() => {
 
 // Главный компонент экрана регистрации
 const RegistrationScreen = () => {
-const { register, updateUserData } = useAuth();
+  const { register, updateUserData } = useAuth();
   const [isReady, setIsReady] = useState(false);
-  
+    const [alertVisible, setAlertVisible] = useState(false);
+  const [alertData, setAlertData] = useState({
+    title: '',
+    message: '',
+    buttons: []
+  });
+
   // Состояния для данных формы
   const [formData, setFormData] = useState({
     step1: { email: '', password: '' },
@@ -626,6 +746,8 @@ const { register, updateUserData } = useAuth();
 
 const handleFinalStepCompleted = async () => {
   try {
+    console.log('🔄 Начинаем процесс регистрации...');
+    
     // 1. Сначала регистрируем пользователя
     const registrationData = await register({
       email: formData.step1.email,
@@ -635,28 +757,43 @@ const handleFinalStepCompleted = async () => {
     });
 
     console.log('✅ Пользователь зарегистрирован:', registrationData);
-
-    // 2. Если есть аватар, загружаем его (теперь у нас есть токен)
+    
+    // 2. Если есть аватар, загружаем его (не блокируем переход)
     if (formData.step2.avatar) {
-      try {
-        const avatarResponse = await apiClient.uploadAvatar(formData.step2.avatar);
-        console.log('✅ Аватарка загружена:', avatarResponse);
-
-        // 3. Обновляем данные пользователя с новым аватаром
-        await updateUserData();
-        console.log('🔄 Данные пользователя обновлены с новой аватаркой');
-      } catch (avatarError) {
-        console.error('⚠️ Ошибка загрузки аватара, но пользователь создан:', avatarError);
-        // Продолжаем даже если аватар не загрузился
-      }
+      apiClient.uploadAvatar(formData.step2.avatar)
+        .then(() => {
+          console.log('✅ Аватар загружен');
+          updateUserData();
+        })
+        .catch(error => {
+          console.error('⚠️ Ошибка загрузки аватара:', error);
+          // Не блокируем переход из-за ошибки аватара
+        });
     }
 
-    // 4. Переходим на главную страницу
-    router.replace('/');
+    // 3. Немедленно переходим на главную
+    console.log('🔄 Переходим на главную...');
+    
+    setTimeout(() => {
+      router.replace('/');
+    }, 500);
     
   } catch (error) {
     console.error('❌ Ошибка регистрации:', error);
-    // Можно добавить показ ошибки пользователю
+    
+    // Детальная обработка ошибок
+    let errorMessage = error.message;
+    
+    // Автоматически переведенные ошибки из apiClient
+    if (errorMessage.includes('email уже зарегистрирован') || 
+        errorMessage.includes('Email already registered')) {
+      alert('❌ Этот email уже зарегистрирован\n\nИспользуйте другой email или войдите в существующий аккаунт');
+    } else if (errorMessage.includes('ник уже занят') || 
+               errorMessage.includes('Username already taken')) {
+      alert('❌ Такой никнейм уже занят\n\nПожалуйста, выберите другое имя пользователя');
+    } else {
+      alert(`❌ Ошибка регистрации: ${errorMessage}`);
+    }
   }
 };
 
@@ -682,11 +819,17 @@ const handleFinalStepCompleted = async () => {
               <View style={{ width: 32 }} /> {/* Заглушка для выравнивания */}
             </View>
 
-            <Stepper
-              onFinalStepCompleted={handleFinalStepCompleted}
-              nextButtonText="Далее"
-              backButtonText="Назад"
-              stepValidations={stepValidations}
+<Stepper
+  onFinalStepCompleted={handleFinalStepCompleted}
+  nextButtonText="Далее"
+  backButtonText="Назад"
+  stepValidations={stepValidations}
+  formData={formData}
+  showAlert={(title, message, buttons) => {
+    setAlertData({ title, message, buttons });
+    setAlertVisible(true);
+  }}
+              
             >
               <Step1EmailPassword onDataChange={(data) => handleStepDataChange('step1', data)} />
               <Step2Profile onDataChange={(data) => handleStepDataChange('step2', data)} />
@@ -695,16 +838,35 @@ const handleFinalStepCompleted = async () => {
             </Stepper>
           </SafeAreaView>
         )}
+<CustomAlert
+  visible={alertVisible}
+  title={alertData.title}
+  message={alertData.message}
+  buttons={alertData.buttons}
+  onClose={() => setAlertVisible(false)}
+/>
       </View>
     </SafeAreaProvider>
   );
 };
 
-// Обновленный StyleSheet
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#0F111E',
+  },
+  eyeButton: {
+    position: 'absolute',
+    right: 12,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 36,
+  },
+  eyeIcon: {
+    fontSize: 20,
   },
   backgroundContainer: {
     position: 'absolute',
@@ -759,9 +921,6 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: 'transparent',
   },
-  stepIndicatorComplete: {
-    backgroundColor: '#16DBBE',
-  },
   stepNumber: {
     fontSize: 14,
     fontWeight: '600',
@@ -789,26 +948,6 @@ const styles = StyleSheet.create({
     position: 'relative',
     overflow: 'hidden',
   },
-  loginContainer: {
-  flexDirection: 'row',
-  justifyContent: 'center',
-  alignItems: 'center',
-  marginTop: 24,
-  gap: 8,
-},
-loginText: {
-  color: '#A3B7D2',
-  fontSize: 14,
-},
-loginButton: {
-  paddingVertical: 4,
-  paddingHorizontal: 12,
-},
-loginButtonText: {
-  color: '#16DBBE',
-  fontSize: 14,
-  fontWeight: '600',
-},
   stepContent: {
     width: '100%',
     height: '100%',
@@ -839,7 +978,7 @@ loginButtonText: {
     gap: 16,
   },
   inputContainerFocused: {
-    marginBottom: 100, // Дополнительное место при фокусе
+    marginBottom: 100,
   },
   inputWrapper: {
     backgroundColor: '#1A1B30',
@@ -859,9 +998,6 @@ loginButtonText: {
     padding: 16,
     fontSize: 16,
     backgroundColor: 'transparent',
-  },
-  inputError: {
-    borderColor: '#FF6B6B',
   },
   errorText: {
     color: '#FF6B6B',
@@ -956,6 +1092,17 @@ loginButtonText: {
   },
   successIconText: {
     fontSize: 48,
+  }, 
+  loadingIndicator: {
+    position: 'absolute',
+    right: 12,
+    top: 0,
+    bottom: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
   },
   successTitle: {
     fontSize: 28,
@@ -964,11 +1111,25 @@ loginButtonText: {
     textAlign: 'center',
     marginBottom: 12,
   },
-  successSubtitle: {
-    fontSize: 16,
+  loginContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 24,
+    gap: 8,
+  },
+  loginText: {
     color: '#A3B7D2',
-    textAlign: 'center',
-    lineHeight: 22,
+    fontSize: 14,
+  },
+  loginButton: {
+    paddingVertical: 4,
+    paddingHorizontal: 12,
+  },
+  loginButtonText: {
+    color: '#16DBBE',
+    fontSize: 14,
+    fontWeight: '600',
   },
   navigationButtons: {
     flexDirection: 'row',
@@ -1010,7 +1171,7 @@ loginButtonText: {
     color: '#7C8599',
   },
   keyboardSpacer: {
-    height: 200, // Дополнительное пространство при открытой клавиатуре
+    height: 200,
   },
 });
 

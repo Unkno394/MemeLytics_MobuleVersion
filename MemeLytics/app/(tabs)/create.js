@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useNavigation } from "@react-navigation/native";
 import * as ImagePicker from "expo-image-picker";
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   Dimensions,
@@ -169,6 +169,7 @@ const CreateMemeScreen = () => {
     width: SCREEN_WIDTH, 
     height: SCREEN_WIDTH 
   });
+  const params = useLocalSearchParams();
   const [isStickerModalVisible, setIsStickerModalVisible] = useState(false);
 const [selectedEmoji, setSelectedEmoji] = useState(null);
   const lastPickedColor = useRef("#FFFFFF");
@@ -208,6 +209,17 @@ setIsDrawingMode(false);
   setEyedropperActive(false);
   setMagnifierVisible(false);
 }, [drawingPaths.length]);
+
+useEffect(() => {
+  const unsubscribe = navigation.addListener('focus', () => {
+    // Проверяем параметры на необходимость очистки
+    if (params?.clearDraft === 'true') {
+      clearDraft();
+    }
+  });
+
+  return unsubscribe;
+}, [navigation, clearDraft]);
 
   // Дебаунсированное обновление координат лупы
   const updateMagnifierCoordsDebounced = useMemo(
@@ -588,27 +600,34 @@ const handleTouchEnd = useCallback(() => {
 }, []);
 
   // Функция для кнопки "Далее"
-  const handleNext = useCallback(async () => {
-    if (!image) return showError("Выберите изображение для мема");
+const handleNext = useCallback(async () => {
+  if (!image) return showError("Выберите изображение для мема");
+  
+  setIsLoading(true);
+  try {
+    const uri = await viewShotRef.current.capture();
     
-    setIsLoading(true);
-    try {
-      const uri = await viewShotRef.current.capture();
-      
-      console.log("📸 Итоговое изображение создано:", uri);
-      
-      // Переходим на экран предпросмотра
-      router.push({
-        pathname: '/previewPost',
-        params: { memeUri: uri },
-      });
-    } catch (err) {
-      console.error("❌ Ошибка при создании предпросмотра:", err);
-      showError("Не удалось создать предпросмотр");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [image, showError]);
+    console.log("📸 Итоговое изображение создано:", uri);
+    
+    // Переходим на экран предпросмотра с передачей ВСЕХ параметров
+    router.push({
+      pathname: '/previewPost',
+      params: { 
+        memeUri: uri,
+        // Передаем реальные размеры изображения из редактора
+        imageWidth: SCREEN_WIDTH,
+        imageHeight: imageDimensions.height,
+        // Передаем описание если есть
+        initialDescription: hashtags || ""
+      },
+    });
+  } catch (err) {
+    console.error("❌ Ошибка при создании предпросмотра:", err);
+    showError("Не удалось создать предпросмотр");
+  } finally {
+    setIsLoading(false);
+  }
+}, [image, imageDimensions.height, hashtags, showError]);
 
   // Рендер
   if (!fontsLoaded) {
